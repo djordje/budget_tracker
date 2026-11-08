@@ -13,6 +13,7 @@ time of the decision and can be superseded by a later record.
 | [0006](0006-entry-attribution-and-visibility.md) | Entry attribution, visibility, and modification rules | Accepted |
 | [0007](0007-exchange-rates-and-reporting.md) | Household exchange rates and incomplete report semantics | Accepted |
 | [0008](0008-invitations-and-currency-preferences.md) | Invitation links and inherited currency preferences | Accepted |
+| [0009](0009-security-headers-and-login-throttling.md) | Browser security headers and login throttling | Accepted |
 
 ## Convention
 

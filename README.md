@@ -8,8 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 4 (invitations, preferences, and UX polish) is complete.
-The final milestone covers hardening, smoke coverage, and documentation.
+**Status:** Milestone 5 (local quality and handoff) is complete. The MVP is
+ready for local use and review.
 
 ## Requirements
 
@@ -29,8 +29,7 @@ mise run run
 `setup` copies `.env.example` to `.env` when needed, installs dependencies,
 compiles the browser assets, starts PostgreSQL, and applies migrations. The
 application is available at <http://localhost:8080/app>. Health checks are
-served at `/healthz` (liveness), `/readyz` (database readiness), and
-`/api/v1/health` (versioned liveness alias).
+served at `/healthz` (liveness) and `/readyz` (database readiness).
 
 Other development tasks:
 
@@ -215,7 +214,8 @@ members see only their own data.
 
 Tailwind CSS is compiled at build time from
 `backend/web/assets/input.css` into `backend/web/static/css/app.css`, and
-HTMX is copied from `node_modules` into `backend/web/static/js/htmx.min.js`.
+HTMX is copied from `node_modules` into `backend/web/static/js/htmx.min.js`;
+the small hand-written confirmation script lives in `backend/web/static/js/app.js`.
 Generated assets are ignored by git and embedded in the Go executable.
 `mise run run` and `mise run build` rebuild them automatically. In development,
 `mise run run` serves assets from disk, so `mise run css:watch` updates styling
@@ -261,5 +261,6 @@ docs/
 ## Documentation
 
 - [Implementation plan](docs/plans/20261108_201136_budget_tracker_mvp_plan.md)
+- [Local operations and known limitations](docs/operations.md)
 - [Architecture decision records](docs/decisions/README.md)
 - [Agent guidance](AGENTS.md)

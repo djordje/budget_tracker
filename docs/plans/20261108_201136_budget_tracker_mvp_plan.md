@@ -430,7 +430,7 @@ Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP
 | 2 — Income and spending | Complete on 2026-11-08 |
 | 3 — Exchange rates and summaries | Complete on 2026-11-08 |
 | 4 — Invitations, preferences, and UX polish | Complete on 2026-11-08 |
-| 5 — Local quality and handoff | Not started |
+| 5 — Local quality and handoff | Complete on 2026-11-08 |
 
 Milestone 0 provides the mise task runner, Go module, local PostgreSQL
 Compose service, embedded SQL migration runner, JSON health endpoints,
@@ -463,3 +463,8 @@ acceptance with email matching and safe post-login redirects, admin
 invitation management, household currency-default settings, per-user currency
 inheritance, preference API and UI, mobile navigation, focus styling, and
 reduced-motion support. See ADR 0008.
+
+Milestone 5 adds same-origin CSP and browser security headers, no-store HTML
+caching, production HSTS, an external confirmation script, in-process failed
+login throttling, invitation-token log redaction, larger request header limits, a public HTTP onboarding-to-report smoke test, and local operations
+and known-limitations documentation. See ADR 0009 and `docs/operations.md`.
