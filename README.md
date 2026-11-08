@@ -8,8 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 1 (identity and households) is complete. The next
-milestone adds currencies, income, and spending entries.
+**Status:** Milestone 2 (income and spending) is complete. The next milestone
+adds exchange rates and converted reports.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ mise run run
 ```
 
 `setup` copies `.env.example` to `.env` when needed, installs dependencies,
-compiles Tailwind CSS, starts PostgreSQL, and applies migrations. The
+compiles the browser assets, starts PostgreSQL, and applies migrations. The
 application is available at <http://localhost:8080/app>. Health checks are
 served at `/healthz` (liveness), `/readyz` (database readiness), and
 `/api/v1/health` (versioned liveness alias).
@@ -107,10 +107,10 @@ admin-only household settings are implemented. A user can belong to multiple
 households; the selected household is stored on the session by token hash.
 Creating a household inserts the household, its admin membership, default
 options, and the active-household preference in one transaction, so an
-activation failure leaves no household behind. Household options start with RSD
-currency defaults until the finance milestone introduces the currencies table
-and editable finance settings. Expired sessions are removed opportunistically
-after successful registration or login, at most once per hour per process.
+activation failure leaves no household behind. Household options default to
+RSD; editable currency preferences arrive with the preferences milestone.
+Expired sessions are removed opportunistically after successful registration
+or login, at most once per hour per process.
 
 Current HTML routes:
 
@@ -120,6 +120,11 @@ Current HTML routes:
 /app                           dashboard
 /app/households/new            create a household
 /app/households/{id}/settings  admin settings and members
+/app/entries                   filtered entry list
+/app/incomes/new               add income
+/app/spendings/new             add spending
+/app/incomes/{id}/edit         edit income
+/app/spendings/{id}/edit       edit spending
 ```
 
 Current JSON endpoints (cookie authentication, CSRF header on unsafe methods):
@@ -130,7 +135,38 @@ POST /api/v1/households
 GET  /api/v1/households/{id}
 GET  /api/v1/households/{id}/members   admin only
 GET  /api/v1/households/{id}/options   members
+GET  /api/v1/currencies
+GET  /api/v1/incomes
+POST /api/v1/incomes
+GET  /api/v1/incomes/{id}
+PATCH /api/v1/incomes/{id}
+DELETE /api/v1/incomes/{id}
+GET  /api/v1/spendings
+POST /api/v1/spendings
+GET  /api/v1/spendings/{id}
+PATCH /api/v1/spendings/{id}
+DELETE /api/v1/spendings/{id}
 ```
+
+Entry lists accept `scope=mine|all`, `from`, `to`, `page`, and `page_size`.
+Members can only use `mine`; admins can view the whole household with `all`.
+Household-wide entries are admin-only to create, view, edit, and delete.
+
+## Income and spending
+
+Amounts are parsed from decimal strings into integer minor units using the
+currency's exponent. The original amount and currency are preserved. Household
+defaults supply the preselected currency and date, and the current user is the
+preselected attribution. The entry list supports type tabs, date filters,
+personal/all scopes for admins, pagination, empty states, and progressive HTMX
+updates with non-JavaScript form fallbacks.
+
+Entry IDs are positive integers and JSON represents them as decimal strings.
+Invalid, zero, negative, or overflowing route IDs are rejected before any
+service call. Unrepresentable pagination offsets and invalid UTF-8 or NUL in
+descriptions return validation feedback instead of database errors. Failed
+HTMX deletes return an error fragment with the original status rather than a
+success notice.
 
 ## Frontend assets
 
@@ -164,6 +200,7 @@ backend/
   db/migrations/       numbered SQL migrations
   internal/auth/       credentials, sessions, cookies, and middleware
   internal/config/     environment configuration
+  internal/finance/    currencies, money, and entry services
   internal/households/ household services and authorization
   internal/httpapi/    JSON handlers, health, CSRF, and middleware
   internal/logging/    structured logging setup

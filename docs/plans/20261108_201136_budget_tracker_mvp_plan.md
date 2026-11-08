@@ -427,7 +427,7 @@ Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP
 | --- | --- |
 | 0 — Project bootstrap | Complete on 2026-11-08 |
 | 1 — Identity and household vertical slice | Complete on 2026-11-08 |
-| 2 — Income and spending | Not started |
+| 2 — Income and spending | Complete on 2026-11-08 |
 | 3 — Exchange rates and summaries | Not started |
 | 4 — Invitations, preferences, and UX polish | Not started |
 | 5 — Local quality and handoff | Not started |
@@ -441,5 +441,12 @@ repository README.
 Milestone 1 adds Argon2id credentials, revocable database sessions,
 registration/login/logout with CSRF protection, household memberships and
 roles, active-household selection, admin settings, and household JSON
-endpoints. Default household currencies are RSD text codes until the finance
-milestone introduces the currencies table and foreign keys.
+endpoints. Household currency defaults were stored as RSD text codes in this
+milestone; Milestone 2 added the currencies table and foreign keys.
+
+Milestone 2 adds seeded currencies, exact decimal amount parsing and display,
+separate income and spending tables, entry services with owner/admin
+authorization, JSON CRUD endpoints, responsive entry forms and lists, filters,
+pagination, empty states, and progressive HTMX updates. Household-wide entries
+are admin-only to create, view, edit, and delete; members manage personal
+entries only. See ADR 0006 for the full attribution rules.

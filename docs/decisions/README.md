@@ -10,6 +10,7 @@ time of the decision and can be superseded by a later record.
 | [0003](0003-money-and-exchange-rate-representation.md) | Integer minor units for money and exact decimals for exchange rates | Accepted |
 | [0004](0004-authentication-and-household-authorization.md) | Separate authentication data and household-scoped authorization | Accepted |
 | [0005](0005-authentication-session-and-csrf.md) | Argon2id credentials, opaque sessions, and double-submit CSRF | Accepted |
+| [0006](0006-entry-attribution-and-visibility.md) | Entry attribution, visibility, and modification rules | Accepted |
 
 ## Convention
 
