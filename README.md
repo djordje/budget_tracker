@@ -8,8 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 0 (project bootstrap) is complete. The next milestone
-adds identity, authentication, and households.
+**Status:** Milestone 1 (identity and households) is complete. The next
+milestone adds currencies, income, and spending entries.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ mise run run
 
 `setup` copies `.env.example` to `.env` when needed, installs dependencies,
 compiles Tailwind CSS, starts PostgreSQL, and applies migrations. The
-application shell is available at <http://localhost:8080/app>. Health checks are
+application is available at <http://localhost:8080/app>. Health checks are
 served at `/healthz` (liveness), `/readyz` (database readiness), and
 `/api/v1/health` (versioned liveness alias).
 
@@ -99,6 +99,38 @@ mise run test:integration
 `mise run check:all` adds the PostgreSQL integration tests. CI runs the same
 migration and check tasks on every push and pull request.
 
+## Accounts and households
+
+Registration, sign-in, sign-out, household creation, household switching, and
+admin-only household settings are implemented. A user can belong to multiple
+households; the selected household is stored on the session by token hash.
+Creating a household inserts the household, its admin membership, default
+options, and the active-household preference in one transaction, so an
+activation failure leaves no household behind. Household options start with RSD
+currency defaults until the finance milestone introduces the currencies table
+and editable finance settings. Expired sessions are removed opportunistically
+after successful registration or login, at most once per hour per process.
+
+Current HTML routes:
+
+```text
+/                              landing page
+/register, /login              account flows
+/app                           dashboard
+/app/households/new            create a household
+/app/households/{id}/settings  admin settings and members
+```
+
+Current JSON endpoints (cookie authentication, CSRF header on unsafe methods):
+
+```text
+GET  /api/v1/households
+POST /api/v1/households
+GET  /api/v1/households/{id}
+GET  /api/v1/households/{id}/members   admin only
+GET  /api/v1/households/{id}/options   members
+```
+
 ## Frontend assets
 
 Tailwind CSS is compiled at build time from
@@ -129,10 +161,14 @@ backend/
   cmd/server/          HTTP server entrypoint
   cmd/migrate/         migration command
   db/migrations/       numbered SQL migrations
+  internal/auth/       credentials, sessions, cookies, and middleware
   internal/config/     environment configuration
-  internal/httpapi/    health, JSON, and HTTP middleware
+  internal/households/ household services and authorization
+  internal/httpapi/    JSON handlers, health, CSRF, and middleware
   internal/logging/    structured logging setup
-  internal/store/      PostgreSQL pool and migration runner
+  internal/server/     HTTP composition and route registration
+  internal/store/      PostgreSQL pool, transactions, and migration runner
+  internal/testdb/     isolated PostgreSQL schemas for integration tests
   internal/web/        HTML handlers and template rendering
   web/                 templates, Tailwind source, and static assets
 docs/

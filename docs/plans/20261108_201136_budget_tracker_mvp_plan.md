@@ -426,7 +426,7 @@ Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP
 | Milestone | Status |
 | --- | --- |
 | 0 — Project bootstrap | Complete on 2026-11-08 |
-| 1 — Identity and household vertical slice | Not started |
+| 1 — Identity and household vertical slice | Complete on 2026-11-08 |
 | 2 — Income and spending | Not started |
 | 3 — Exchange rates and summaries | Not started |
 | 4 — Invitations, preferences, and UX polish | Not started |
@@ -437,3 +437,9 @@ Compose service, embedded SQL migration runner, JSON health endpoints,
 server-rendered application shell, build-time Tailwind CSS, structured
 logging, and CI. The local setup and check commands are documented in the
 repository README.
+
+Milestone 1 adds Argon2id credentials, revocable database sessions,
+registration/login/logout with CSRF protection, household memberships and
+roles, active-household selection, admin settings, and household JSON
+endpoints. Default household currencies are RSD text codes until the finance
+milestone introduces the currencies table and foreign keys.

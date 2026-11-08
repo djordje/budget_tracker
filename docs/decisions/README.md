@@ -9,6 +9,7 @@ time of the decision and can be superseded by a later record.
 | [0002](0002-postgresql-and-explicit-migrations.md) | PostgreSQL with `pgx` and explicit SQL migrations | Accepted |
 | [0003](0003-money-and-exchange-rate-representation.md) | Integer minor units for money and exact decimals for exchange rates | Accepted |
 | [0004](0004-authentication-and-household-authorization.md) | Separate authentication data and household-scoped authorization | Accepted |
+| [0005](0005-authentication-session-and-csrf.md) | Argon2id credentials, opaque sessions, and double-submit CSRF | Accepted |
 
 ## Convention
 
