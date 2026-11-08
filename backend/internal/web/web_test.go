@@ -12,7 +12,10 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/google/uuid"
+
 	"budgettracker/internal/auth"
+	"budgettracker/internal/households"
 )
 
 type stubSessions struct {
@@ -32,11 +35,47 @@ func (s stubSessions) DeleteSession(context.Context, string) error {
 	return s.err
 }
 
+func (s stubSessions) SetActiveHousehold(context.Context, string, uuid.UUID, *uuid.UUID) error {
+	return s.err
+}
+
+type stubHouseholds struct {
+	households        []households.Household
+	err               error
+	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
+}
+
+func (s stubHouseholds) CreateAndActivate(
+	ctx context.Context, userID uuid.UUID, sessionTokenHash, name string,
+) (households.Household, error) {
+	if s.createAndActivate != nil {
+		return s.createAndActivate(ctx, userID, sessionTokenHash, name)
+	}
+	return households.Household{}, s.err
+}
+
+func (s stubHouseholds) List(context.Context, uuid.UUID) ([]households.Household, error) {
+	return s.households, s.err
+}
+
+func (s stubHouseholds) Rename(context.Context, uuid.UUID, uuid.UUID, string) (households.Household, error) {
+	return households.Household{}, s.err
+}
+
+func (s stubHouseholds) Members(context.Context, uuid.UUID, uuid.UUID) ([]households.Member, error) {
+	return nil, s.err
+}
+
+func (s stubHouseholds) GetOptions(context.Context, uuid.UUID, uuid.UUID) (households.Options, error) {
+	return households.Options{}, s.err
+}
+
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	handler, err := New(Deps{
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Sessions: stubSessions{},
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -177,9 +216,10 @@ func TestStaticRejectsDotfilesAndDirectories(t *testing.T) {
 	}
 
 	handler, err := New(Deps{
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Sessions:  stubSessions{},
-		StaticDir: staticDir,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
+		StaticDir:  staticDir,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -219,9 +259,10 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 	}
 
 	handler, err := New(Deps{
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Sessions:  stubSessions{},
-		StaticDir: staticDir,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
+		StaticDir:  staticDir,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -247,16 +288,29 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 func TestNewRejectsMissingStaticDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	if _, err := New(Deps{
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Sessions:  stubSessions{},
-		StaticDir: missing,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
+		StaticDir:  missing,
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
 }
 
 func TestNewRequiresSessionService(t *testing.T) {
-	if _, err := New(Deps{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}); err == nil {
+	if _, err := New(Deps{
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Households: stubHouseholds{},
+	}); err == nil {
+		t.Fatal("New() error = nil, want error")
+	}
+}
+
+func TestNewRequiresHouseholdService(t *testing.T) {
+	if _, err := New(Deps{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions: stubSessions{},
+	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
 }

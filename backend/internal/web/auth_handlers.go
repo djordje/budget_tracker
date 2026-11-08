@@ -24,7 +24,11 @@ type registerPageData struct {
 
 // Home serves the public landing page.
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "home", http.StatusOK, h.newPageData(r, "Budget Tracker"))
+	data, ok := h.pageDataOrError(w, r, "Budget Tracker")
+	if !ok {
+		return
+	}
+	h.render(w, r, "home", http.StatusOK, data)
 }
 
 // LoginPage serves the sign-in form.
@@ -32,7 +36,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	if redirectIfAuthenticated(w, r) {
 		return
 	}
-	h.render(w, r, "login", http.StatusOK, loginPageData{pageData: h.newPageData(r, "Sign in")})
+	h.render(w, r, "login", http.StatusOK, loginPageData{pageData: h.basePageData(r, "Sign in")})
 }
 
 // Login processes a sign-in form.
@@ -52,7 +56,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			h.render(w, r, "login", http.StatusUnprocessableEntity, loginPageData{
-				pageData:  h.newPageData(r, "Sign in"),
+				pageData:  h.basePageData(r, "Sign in"),
 				Email:     email,
 				FormError: "Email or password is incorrect.",
 			})
@@ -71,7 +75,7 @@ func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	if redirectIfAuthenticated(w, r) {
 		return
 	}
-	h.render(w, r, "register", http.StatusOK, registerPageData{pageData: h.newPageData(r, "Create account")})
+	h.render(w, r, "register", http.StatusOK, registerPageData{pageData: h.basePageData(r, "Create account")})
 }
 
 // Register processes an account registration form.
@@ -111,7 +115,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 				fieldErrors[field] = message
 			}
 			h.render(w, r, "register", http.StatusUnprocessableEntity, registerPageData{
-				pageData:    h.newPageData(r, "Create account"),
+				pageData:    h.basePageData(r, "Create account"),
 				FirstName:   params.FirstName,
 				LastName:    params.LastName,
 				Email:       params.Email,
@@ -120,7 +124,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, auth.ErrEmailTaken):
 			fieldErrors["email"] = "An account with this email already exists."
 			h.render(w, r, "register", http.StatusUnprocessableEntity, registerPageData{
-				pageData:    h.newPageData(r, "Create account"),
+				pageData:    h.basePageData(r, "Create account"),
 				FirstName:   params.FirstName,
 				LastName:    params.LastName,
 				Email:       params.Email,
@@ -142,7 +146,11 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	h.render(w, r, "dashboard", http.StatusOK, h.newPageData(r, "Dashboard"))
+	data, ok := h.pageDataOrError(w, r, "Dashboard")
+	if !ok {
+		return
+	}
+	h.render(w, r, "dashboard", http.StatusOK, data)
 }
 
 // Logout revokes the current session and clears the cookie.

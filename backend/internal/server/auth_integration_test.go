@@ -154,7 +154,7 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("POST /register status = %d, body:\n%s", response.StatusCode, body)
 	}
-	for _, want := range []string{"Welcome, Ada.", "ada@example.com"} {
+	for _, want := range []string{"Welcome, Ada.", "Create household"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard does not contain %q", want)
 		}

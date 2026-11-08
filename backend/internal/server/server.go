@@ -34,10 +34,11 @@ func New(deps Deps) (http.Handler, error) {
 	sessions := auth.NewMiddleware(authService, cookies, deps.Logger)
 
 	webHandler, err := web.New(web.Deps{
-		Logger:    deps.Logger,
-		Sessions:  authService,
-		Cookies:   cookies,
-		StaticDir: deps.StaticDir,
+		Logger:     deps.Logger,
+		Sessions:   authService,
+		Households: householdService,
+		Cookies:    cookies,
+		StaticDir:  deps.StaticDir,
 	})
 	if err != nil {
 		return nil, err
@@ -53,6 +54,11 @@ func New(deps Deps) (http.Handler, error) {
 	protected.Handle("POST /register", http.HandlerFunc(webHandler.Register))
 	protected.Handle("POST /logout", web.RequireAuth(webHandler.Logout))
 	protected.Handle("GET /app", web.RequireAuth(webHandler.Dashboard))
+	protected.Handle("GET /app/households/new", web.RequireAuth(webHandler.NewHouseholdPage))
+	protected.Handle("POST /app/households", web.RequireAuth(webHandler.CreateHousehold))
+	protected.Handle("GET /app/households/{householdID}/settings", web.RequireAuth(webHandler.HouseholdSettings))
+	protected.Handle("POST /app/households/{householdID}/settings", web.RequireAuth(webHandler.UpdateHousehold))
+	protected.Handle("POST /app/active-household", web.RequireAuth(webHandler.ActivateHousehold))
 	protected.Handle("GET /api/v1/households", httpapi.RequireAuthAPI(householdAPI.List))
 	protected.Handle("POST /api/v1/households", httpapi.RequireAuthAPI(householdAPI.Create))
 	protected.Handle("GET /api/v1/households/{householdID}", httpapi.RequireAuthAPI(householdAPI.Get))

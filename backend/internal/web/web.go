@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"budgettracker/internal/auth"
+	"budgettracker/internal/households"
 	site "budgettracker/web"
 )
 
@@ -22,25 +25,37 @@ type SessionService interface {
 	Register(ctx context.Context, params auth.RegisterParams) (auth.Session, error)
 	Login(ctx context.Context, email, password string) (auth.Session, error)
 	DeleteSession(ctx context.Context, rawToken string) error
+	SetActiveHousehold(ctx context.Context, tokenHash string, userID uuid.UUID, householdID *uuid.UUID) error
+}
+
+// HouseholdService is the household behavior needed by HTML handlers.
+type HouseholdService interface {
+	CreateAndActivate(ctx context.Context, userID uuid.UUID, sessionTokenHash, name string) (households.Household, error)
+	List(ctx context.Context, userID uuid.UUID) ([]households.Household, error)
+	Rename(ctx context.Context, userID, householdID uuid.UUID, name string) (households.Household, error)
+	Members(ctx context.Context, userID, householdID uuid.UUID) ([]households.Member, error)
+	GetOptions(ctx context.Context, userID, householdID uuid.UUID) (households.Options, error)
 }
 
 // Deps contains the dependencies needed by the HTML application.
 type Deps struct {
-	Logger    *slog.Logger
-	Sessions  SessionService
-	Cookies   auth.CookieConfig
-	StaticDir string
+	Logger     *slog.Logger
+	Sessions   SessionService
+	Households HouseholdService
+	Cookies    auth.CookieConfig
+	StaticDir  string
 }
 
 // Handler serves the HTML pages and static assets.
 type Handler struct {
-	pages    map[string]*template.Template
-	static   http.Handler
-	staticFS fs.FS
-	logger   *slog.Logger
-	year     int
-	sessions SessionService
-	cookies  auth.CookieConfig
+	pages      map[string]*template.Template
+	static     http.Handler
+	staticFS   fs.FS
+	logger     *slog.Logger
+	year       int
+	sessions   SessionService
+	households HouseholdService
+	cookies    auth.CookieConfig
 }
 
 // New parses the embedded templates and prepares the static file handler. A
@@ -52,6 +67,9 @@ func New(deps Deps) (*Handler, error) {
 	}
 	if deps.Sessions == nil {
 		return nil, fmt.Errorf("session service is required")
+	}
+	if deps.Households == nil {
+		return nil, fmt.Errorf("household service is required")
 	}
 
 	pages, err := parsePages(site.Templates)
@@ -77,13 +95,14 @@ func New(deps Deps) (*Handler, error) {
 	}
 
 	return &Handler{
-		pages:    pages,
-		static:   http.FileServer(http.FS(staticRoot)),
-		staticFS: staticRoot,
-		logger:   deps.Logger,
-		year:     time.Now().Year(),
-		sessions: deps.Sessions,
-		cookies:  deps.Cookies,
+		pages:      pages,
+		static:     http.FileServer(http.FS(staticRoot)),
+		staticFS:   staticRoot,
+		logger:     deps.Logger,
+		year:       time.Now().Year(),
+		sessions:   deps.Sessions,
+		households: deps.Households,
+		cookies:    deps.Cookies,
 	}, nil
 }
 
