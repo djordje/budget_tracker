@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -33,7 +34,7 @@ type errorPageData struct {
 func (h *Handler) basePageData(r *http.Request, title string) pageData {
 	data := pageData{
 		Title:  title,
-		Year:   h.year,
+		Year:   time.Now().Year(),
 		CSRF:   httpapi.CSRFToken(r.Context()),
 		Notice: noticeFromQuery(r),
 	}
@@ -117,16 +118,32 @@ func (h *Handler) pageDataOrError(w http.ResponseWriter, r *http.Request, title 
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, status int, data any) {
+	h.renderTemplate(w, r, page, "layout", status, data)
+}
+
+func (h *Handler) renderFragment(w http.ResponseWriter, r *http.Request, page, name string, status int, data any) {
+	h.renderTemplate(w, r, page, name, status, data)
+}
+
+// renderTemplate executes one template into a buffer before writing anything,
+// so execution failures produce a clean 500 instead of a partial response.
+func (h *Handler) renderTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+	page, name string,
+	status int,
+	data any,
+) {
 	tmpl, ok := h.pages[page]
 	if !ok {
-		h.logger.Error("page template not found", "page", page)
+		h.logger.Error("template page not found", "page", page)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	var body bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&body, "layout", data); err != nil {
-		h.logger.Error("render page", "page", page, "path", r.URL.Path, "error", err)
+	if err := tmpl.ExecuteTemplate(&body, name, data); err != nil {
+		h.logger.Error("render template", "page", page, "template", name, "path", r.URL.Path, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -135,8 +152,12 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, st
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if _, err := body.WriteTo(w); err != nil {
-		h.logger.Error("write page", "page", page, "path", r.URL.Path, "error", err)
+		h.logger.Error("write template", "page", page, "template", name, "path", r.URL.Path, "error", err)
 	}
+}
+
+func isHTMX(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
 }
 
 func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int, title, message string) {

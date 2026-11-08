@@ -283,3 +283,117 @@ func TestEntryHTMLPaginationAndFilters(t *testing.T) {
 		t.Errorf("date filter did not isolate one entry:\n%s", body)
 	}
 }
+
+func (c *testClient) postFormHTMXNoRedirect(t *testing.T, path string, values url.Values) *http.Response {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, c.baseURL+path, strings.NewReader(values.Encode()))
+	if err != nil {
+		t.Fatalf("create HTMX POST request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	response, err := c.noRedirect.Do(request)
+	if err != nil {
+		t.Fatalf("HTMX POST %s: %v", path, err)
+	}
+	return response
+}
+
+func (c *testClient) postFormHTMX(t *testing.T, path string, values url.Values) *http.Response {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, c.baseURL+path, strings.NewReader(values.Encode()))
+	if err != nil {
+		t.Fatalf("create HTMX POST request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	response, err := c.follow.Do(request)
+	if err != nil {
+		t.Fatalf("HTMX POST %s: %v", path, err)
+	}
+	return response
+}
+
+func TestEntryHTMXFormResponses(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+	createHouseholdHTML(t, client, csrf, "Home")
+
+	response := client.postFormHTMX(t, "/app/spendings", url.Values{
+		"csrf_token":    {csrf},
+		"amount":        {"12.34"},
+		"currency_code": {"EUR"},
+		"entry_date":    {"2026-10-05"},
+		"description":   {"HTMX coffee"},
+	})
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("HTMX create = %d, want 204", response.StatusCode)
+	}
+	if redirect := response.Header.Get("HX-Redirect"); !strings.Contains(redirect, "/app/entries?") || !strings.Contains(redirect, "notice=entry_created") {
+		t.Errorf("HX-Redirect = %q", redirect)
+	}
+
+	response = client.postFormHTMX(t, "/app/spendings", url.Values{
+		"csrf_token":    {csrf},
+		"amount":        {"1.234"},
+		"currency_code": {"EUR"},
+		"entry_date":    {"2026-10-05"},
+		"description":   {"Invalid HTMX coffee"},
+	})
+	body := readBody(t, response)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("HTMX validation = %d, want 200", response.StatusCode)
+	}
+	for _, want := range []string{`id="entry-form"`, "at most 2 decimal places", "Invalid HTMX coffee"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("HTMX validation body does not contain %q", want)
+		}
+	}
+	if strings.Contains(body, "<html") {
+		t.Error("HTMX validation returned a full page instead of a form fragment")
+	}
+
+	entryID := entryIDByDescription(t, client, "spendings", "HTMX coffee")
+	response = client.postFormHTMX(t, "/app/spendings/"+strconv.FormatInt(entryID, 10), url.Values{
+		"csrf_token":    {csrf},
+		"amount":        {"13.00"},
+		"currency_code": {"EUR"},
+		"entry_date":    {"2026-10-06"},
+		"description":   {"HTMX lunch"},
+	})
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("HTMX update = %d, want 204", response.StatusCode)
+	}
+	if redirect := response.Header.Get("HX-Redirect"); !strings.Contains(redirect, "notice=entry_updated") {
+		t.Errorf("HX-Redirect update = %q", redirect)
+	}
+
+	response = client.postFormHTMXNoRedirect(t, "/app/spendings/"+strconv.FormatInt(entryID, 10)+"/delete", url.Values{
+		"csrf_token":  {csrf},
+		"return_page": {"1"},
+	})
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("HTMX delete = %d, want %d", response.StatusCode, http.StatusSeeOther)
+	}
+	if redirect := response.Header.Get("Location"); !strings.Contains(redirect, "notice=entry_deleted") ||
+		!strings.Contains(redirect, "type=spending") {
+		t.Errorf("delete Location = %q", redirect)
+	}
+
+	response = client.postFormHTMXNoRedirect(t, "/app/spendings/"+strconv.FormatInt(entryID, 10)+"/delete", url.Values{
+		"csrf_token": {csrf},
+	})
+	body = readBody(t, response)
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("HTMX delete missing = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+	if !strings.Contains(body, `id="entries-content"`) || !strings.Contains(body, "no longer available") {
+		t.Errorf("delete failure fragment = %q", body)
+	}
+	if strings.Contains(body, "entry_deleted") || strings.Contains(body, "Back to entries") == false {
+		t.Errorf("delete failure fragment advertised success: %q", body)
+	}
+}

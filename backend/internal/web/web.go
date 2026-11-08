@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -64,7 +63,6 @@ type Handler struct {
 	static     http.Handler
 	staticFS   fs.FS
 	logger     *slog.Logger
-	year       int
 	sessions   SessionService
 	households HouseholdService
 	entries    EntryService
@@ -115,7 +113,6 @@ func New(deps Deps) (*Handler, error) {
 		static:     http.FileServer(http.FS(staticRoot)),
 		staticFS:   staticRoot,
 		logger:     deps.Logger,
-		year:       time.Now().Year(),
 		sessions:   deps.Sessions,
 		households: deps.Households,
 		entries:    deps.Entries,
@@ -129,14 +126,24 @@ func parsePages(fsys fs.FS) (map[string]*template.Template, error) {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
 
+	partials := make([]string, 0, len(files))
+	for _, file := range files {
+		if strings.HasPrefix(path.Base(file), "_") {
+			partials = append(partials, file)
+		}
+	}
+
 	pages := make(map[string]*template.Template, len(files))
 	for _, file := range files {
-		name := strings.TrimSuffix(path.Base(file), ".html")
-		if name == "layout" {
+		base := path.Base(file)
+		if base == "layout.html" || strings.HasPrefix(base, "_") {
 			continue
 		}
+		name := strings.TrimSuffix(base, ".html")
 
-		page, err := template.ParseFS(fsys, "templates/layout.html", file)
+		patterns := append([]string{"templates/layout.html"}, partials...)
+		patterns = append(patterns, file)
+		page, err := template.ParseFS(fsys, patterns...)
 		if err != nil {
 			return nil, fmt.Errorf("parse template %q: %w", file, err)
 		}

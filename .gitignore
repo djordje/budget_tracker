@@ -14,6 +14,8 @@ mise.local.toml
 /backend/node_modules/
 /backend/web/static/css/*.css
 /backend/web/static/css/*.css.map
+/backend/web/static/js/*.js
+/backend/web/static/js/*.js.map
 
 # Editor and OS files
 .DS_Store

@@ -11,18 +11,21 @@
     </a>
   </div>
 
+  <div id="entries-content" aria-live="polite">
   <div class="mt-8 flex gap-1 border-b border-stone-200" role="tablist" aria-label="Entry type">
     <a href="{{.IncomeURL}}" role="tab" aria-selected="{{if eq .Kind "income"}}true{{else}}false{{end}}"
+       hx-get="{{.IncomeURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
        class="rounded-t-lg px-4 py-2.5 text-sm font-semibold {{if eq .Kind "income"}}border-b-2 border-emerald-700 text-emerald-800{{else}}text-stone-500 hover:text-stone-800{{end}}">
       Income
     </a>
     <a href="{{.SpendingURL}}" role="tab" aria-selected="{{if eq .Kind "spending"}}true{{else}}false{{end}}"
+       hx-get="{{.SpendingURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
        class="rounded-t-lg px-4 py-2.5 text-sm font-semibold {{if eq .Kind "spending"}}border-b-2 border-emerald-700 text-emerald-800{{else}}text-stone-500 hover:text-stone-800{{end}}">
       Spending
     </a>
   </div>
 
-  <form method="get" action="/app/entries" class="mt-6 grid gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-end">
+  <form method="get" action="/app/entries" hx-get="/app/entries" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="mt-6 grid gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-end">
     <input type="hidden" name="type" value="{{.Kind}}">
     {{if .IsAdmin}}
       <div>
@@ -44,7 +47,7 @@
     <button type="submit" class="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2">
       Filter
     </button>
-    <a href="{{.ClearURL}}" class="rounded-lg px-3 py-2 text-center text-sm font-semibold text-stone-600 hover:bg-stone-100">Clear</a>
+    <a href="{{.ClearURL}}" hx-get="{{.ClearURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="rounded-lg px-3 py-2 text-center text-sm font-semibold text-stone-600 hover:bg-stone-100">Clear</a>
   </form>
 
   {{if .Entries}}
@@ -71,8 +74,12 @@
               {{if .CanModify}}
                 <div class="flex items-center gap-3 text-sm">
                   <a href="{{.EditURL}}" class="font-semibold text-stone-600 hover:text-stone-900">Edit</a>
-                  <form method="post" action="{{.DeleteURL}}" onsubmit="return confirm('Delete this entry?');">
+                  <form method="post" action="{{.DeleteURL}}" hx-post="{{.DeleteURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" onsubmit="return confirm('Delete this entry?');">
                     <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                    <input type="hidden" name="return_scope" value="{{if $.ScopeAll}}all{{end}}">
+                    <input type="hidden" name="return_from" value="{{$.From}}">
+                    <input type="hidden" name="return_to" value="{{$.To}}">
+                    <input type="hidden" name="return_page" value="{{$.Page}}">
                     <button type="submit" class="font-semibold text-rose-700 hover:text-rose-900">Delete</button>
                   </form>
                 </div>
@@ -87,13 +94,13 @@
       <nav class="mt-5 flex items-center justify-between gap-3 text-sm" aria-label="Pagination">
         <div>
           {{if .PreviousURL}}
-            <a href="{{.PreviousURL}}" class="rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">&larr; Previous</a>
+            <a href="{{.PreviousURL}}" hx-get="{{.PreviousURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">&larr; Previous</a>
           {{end}}
         </div>
         <p class="text-stone-500">Page {{.Page}} of {{.TotalPages}} &middot; {{.Total}} entries</p>
         <div>
           {{if .NextURL}}
-            <a href="{{.NextURL}}" class="rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Next &rarr;</a>
+            <a href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Next &rarr;</a>
           {{end}}
         </div>
       </nav>
@@ -107,5 +114,15 @@
       </a>
     </div>
   {{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "entries_error"}}
+<section id="entries-content" aria-live="polite" class="mt-6">
+  <div role="alert" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+    {{.Message}}
+  </div>
+  <a href="{{.ReturnURL}}" class="mt-4 inline-flex rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Back to entries</a>
 </section>
 {{end}}

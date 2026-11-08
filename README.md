@@ -40,6 +40,7 @@ mise run lint         # run go vet
 mise run test         # run unit tests
 mise run build        # build bin/budget-tracker
 mise run css:build    # compile Tailwind CSS
+mise run assets:build # compile CSS and copy HTMX
 mise run css:watch    # rebuild CSS while editing templates
 mise run db:status    # show applied and pending migrations
 mise run db:down      # stop local PostgreSQL
@@ -134,12 +135,12 @@ GET  /api/v1/households/{id}/options   members
 ## Frontend assets
 
 Tailwind CSS is compiled at build time from
-`backend/web/assets/input.css` into
-`backend/web/static/css/app.css`. The generated CSS is ignored by git and is
-embedded in the Go executable. `mise run run` and `mise run build` rebuild it
-automatically. In development, `mise run run` serves assets from disk, so
-`mise run css:watch` updates styling without restarting the server. Production
-builds use the embedded copies.
+`backend/web/assets/input.css` into `backend/web/static/css/app.css`, and
+HTMX is copied from `node_modules` into `backend/web/static/js/htmx.min.js`.
+Generated assets are ignored by git and embedded in the Go executable.
+`mise run run` and `mise run build` rebuild them automatically. In development,
+`mise run run` serves assets from disk, so `mise run css:watch` updates styling
+without restarting the server. Production builds use the embedded copies.
 
 ## Database migrations
 

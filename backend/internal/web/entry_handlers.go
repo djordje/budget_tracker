@@ -67,6 +67,12 @@ type entryFormPageData struct {
 	FormError             string
 }
 
+type entryListErrorData struct {
+	pageData
+	Message   string
+	ReturnURL string
+}
+
 type entryFormValues struct {
 	Amount        string
 	CurrencyCode  string
@@ -255,7 +261,7 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finan
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
 		data.FieldErrors = map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."}
-		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+		h.renderEntryForm(w, r, http.StatusUnprocessableEntity, data)
 		return
 	}
 
@@ -274,7 +280,7 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finan
 		return
 	}
 
-	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_created", http.StatusSeeOther)
+	h.redirectEntryList(w, r, kind, "entry_created")
 }
 
 // EditIncomePage serves the income edit form.
@@ -389,7 +395,7 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
 		data.FieldErrors = map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."}
-		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+		h.renderEntryForm(w, r, http.StatusUnprocessableEntity, data)
 		return
 	}
 	amount := values.Amount
@@ -409,7 +415,7 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 		return
 	}
 
-	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_updated", http.StatusSeeOther)
+	h.redirectEntryList(w, r, kind, "entry_updated")
 }
 
 // DeleteIncome deletes an income from the HTML form.
@@ -433,11 +439,38 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finan
 		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
 		return
 	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
 	if err := h.entries.Delete(r.Context(), session.User.ID, kind, id); err != nil {
+		if isHTMX(r) {
+			h.renderEntryDeleteError(w, r, kind, err)
+			return
+		}
 		h.renderEntryError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_deleted", http.StatusSeeOther)
+	http.Redirect(w, r, entryListReturnURL(r, kind)+"&notice=entry_deleted", http.StatusSeeOther)
+}
+
+func (h *Handler) renderEntryDeleteError(w http.ResponseWriter, r *http.Request, kind finance.Kind, err error) {
+	data := entryListErrorData{
+		pageData:  h.basePageData(r, "Entries"),
+		ReturnURL: entryListReturnURL(r, kind),
+	}
+	switch {
+	case errors.Is(err, finance.ErrNotFound):
+		data.Message = "That entry is no longer available."
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusNotFound, data)
+	case errors.Is(err, finance.ErrForbidden):
+		data.Message = "You do not have permission to delete that entry."
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusForbidden, data)
+	default:
+		h.logger.Error("delete entry failed", "path", r.URL.Path, "error", err)
+		data.Message = "The entry could not be deleted. Try again."
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusInternalServerError, data)
+	}
 }
 
 func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool) (entryFormPageData, error) {
@@ -474,15 +507,53 @@ func (h *Handler) renderEntryFormError(w http.ResponseWriter, r *http.Request, d
 		for field, message := range validation.Fields {
 			data.FieldErrors[field] = message
 		}
-		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+		h.renderEntryForm(w, r, http.StatusUnprocessableEntity, data)
 	case errors.Is(err, finance.ErrForbidden):
 		data.FormError = "You do not have permission to save this entry."
-		h.render(w, r, "entry_form", http.StatusForbidden, data)
+		h.renderEntryForm(w, r, http.StatusForbidden, data)
 	case errors.Is(err, finance.ErrNotFound):
 		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
 	default:
 		h.internalError(w, r, err)
 	}
+}
+
+func (h *Handler) renderEntryForm(w http.ResponseWriter, r *http.Request, status int, data entryFormPageData) {
+	if isHTMX(r) {
+		h.renderFragment(w, r, "entry_form", "entry_form_panel", http.StatusOK, data)
+		return
+	}
+	h.render(w, r, "entry_form", status, data)
+}
+
+func (h *Handler) redirectEntryList(w http.ResponseWriter, r *http.Request, kind finance.Kind, notice string) {
+	target := entryListURL(kind, finance.ScopeMine, "", "", 1) + "&notice=" + notice
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", target)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func entryListReturnURL(r *http.Request, kind finance.Kind) string {
+	scope := finance.ScopeMine
+	if r.FormValue("return_scope") == "all" {
+		scope = finance.ScopeAll
+	}
+	from := r.FormValue("return_from")
+	if _, err := parseOptionalDate(from); err != nil {
+		from = ""
+	}
+	to := r.FormValue("return_to")
+	if _, err := parseOptionalDate(to); err != nil {
+		to = ""
+	}
+	page, err := parsePage(r.FormValue("return_page"))
+	if err != nil {
+		page = 1
+	}
+	return entryListURL(kind, scope, from, to, page)
 }
 
 func (h *Handler) renderEntryError(w http.ResponseWriter, r *http.Request, err error) {

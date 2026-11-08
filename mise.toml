@@ -12,7 +12,7 @@ run = [
   "test -f .env || cp .env.example .env",
   "mise install",
   "mise run deps",
-  "mise run css:build",
+  "mise run assets:build",
   "mise run db:up",
   "mise run db:migrate",
 ]
@@ -31,6 +31,14 @@ run = "cd backend && npm run css:build"
 [tasks."css:watch"]
 description = "Rebuild Tailwind CSS while editing templates"
 run = "cd backend && npm run css:watch"
+
+[tasks."js:build"]
+description = "Copy HTMX into the static assets"
+run = "cd backend && npm run js:build"
+
+[tasks."assets:build"]
+description = "Compile CSS and copy browser JavaScript"
+run = "cd backend && npm run assets:build"
 
 [tasks.tidy]
 description = "Tidy the Go module"
@@ -62,12 +70,12 @@ run = "cd backend && go test ./..."
 
 [tasks.run]
 description = "Run the HTTP server"
-depends = ["css:build"]
+depends = ["assets:build"]
 run = "cd backend && WEB_STATIC_DIR=\"${WEB_STATIC_DIR:-web/static}\" go run ./cmd/server"
 
 [tasks.build]
 description = "Build the server executable"
-depends = ["css:build"]
+depends = ["assets:build"]
 run = "mkdir -p bin && cd backend && go build -trimpath -ldflags \"-s -w -X budgettracker/internal/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/budget-tracker ./cmd/server"
 
 [tasks."db:up"]

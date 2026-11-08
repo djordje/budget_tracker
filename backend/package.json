@@ -3,10 +3,13 @@
   "private": true,
   "scripts": {
     "css:build": "tailwindcss -i ./web/assets/input.css -o ./web/static/css/app.css --minify",
-    "css:watch": "tailwindcss -i ./web/assets/input.css -o ./web/static/css/app.css --watch"
+    "css:watch": "tailwindcss -i ./web/assets/input.css -o ./web/static/css/app.css --watch",
+    "js:build": "mkdir -p ./web/static/js && cp ./node_modules/htmx.org/dist/htmx.min.js ./web/static/js/htmx.min.js",
+    "assets:build": "npm run css:build && npm run js:build"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.5",
-    "tailwindcss": "4.3.5"
+    "tailwindcss": "4.3.5",
+    "htmx.org": "2.0.11"
   }
 }
