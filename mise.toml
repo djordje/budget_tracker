@@ -38,10 +38,31 @@ run = "cd backend && go vet ./..."
 description = "Run unit tests"
 run = "cd backend && go test ./..."
 
+[tasks.run]
+description = "Run the HTTP server"
+run = "cd backend && go run ./cmd/server"
+
+[tasks.build]
+description = "Build the server executable"
+run = "mkdir -p bin && cd backend && go build -trimpath -ldflags \"-s -w -X budgettracker/internal/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/budget-tracker ./cmd/server"
+
+[tasks."db:up"]
+description = "Start local PostgreSQL"
+run = "docker compose up -d --wait postgres"
+
+[tasks."db:down"]
+description = "Stop local PostgreSQL"
+run = "docker compose down"
+
+[tasks."db:logs"]
+description = "Follow local PostgreSQL logs"
+run = "docker compose logs -f postgres"
+
 [tasks.check]
-description = "Run formatting, linting, and unit tests"
+description = "Run formatting, linting, tests, and a build"
 run = [
   "mise run format:check",
   "mise run lint",
   "mise run test",
+  "mise run build",
 ]

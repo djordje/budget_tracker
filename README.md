@@ -17,25 +17,45 @@ in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_2
 
 ## Current commands
 
-Install the pinned toolchain and then run:
+Install the pinned toolchain, start the local database, and run the server:
 
 ```sh
 mise install
 mise run deps
-mise run format
-mise run lint
-mise run test
+mise run db:up
+mise run run
 ```
 
-`check` runs the formatting check, linting, and unit tests together:
+The application is available at <http://localhost:8080>. Health checks are
+served at `/healthz`, `/readyz`, and `/api/v1/health`.
+
+Other development tasks:
+
+```sh
+mise run format      # format Go source
+mise run lint        # run go vet
+mise run test        # run unit tests
+mise run build       # build bin/budget-tracker
+mise run db:down     # stop local PostgreSQL
+```
+
+`check` runs the formatting check, linting, unit tests, and a build together:
 
 ```sh
 mise run check
 ```
 
 Configuration is read from the environment. [.env.example](.env.example)
-documents the available variables and local defaults. `mise` automatically
-loads a local `.env` file for every task; do not commit it.
+documents the available variables; `DATABASE_URL` is required in every
+environment. `mise` automatically loads a local `.env` file for every task, and
+`mise run setup` copies `.env.example` when needed. Do not commit `.env`.
+Running the server outside `mise` without `DATABASE_URL` fails clearly at
+startup. `APP_ENV` accepts only `development` or `production`; `LOG_LEVEL`
+accepts `debug`, `info`, `warn`, or `error`. `WEB_STATIC_DIR` is optional and
+empty by default.
+
+The Compose PostgreSQL instance binds to `127.0.0.1:5433` and uses trust
+authentication for local development only. It is not intended for production.
 
 ## Documentation
 
