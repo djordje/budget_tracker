@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"budgettracker/internal/config"
-	"budgettracker/internal/httpapi"
 	"budgettracker/internal/logging"
+	"budgettracker/internal/server"
 	"budgettracker/internal/store"
-	"budgettracker/internal/web"
 )
 
 func main() {
@@ -43,24 +42,19 @@ func run() error {
 	}
 	defer db.Close()
 
-	health := httpapi.NewHealth(db, logger)
-
-	webHandler, err := web.New(logger, cfg.StaticDir)
+	handler, err := server.New(server.Deps{
+		Logger:        logger,
+		DB:            db,
+		StaticDir:     cfg.StaticDir,
+		SecureCookies: cfg.Env == "production",
+	})
 	if err != nil {
-		return fmt.Errorf("create web handler: %w", err)
+		return fmt.Errorf("build HTTP handler: %w", err)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /{$}", http.RedirectHandler("/app", http.StatusPermanentRedirect))
-	mux.Handle("GET /app", http.HandlerFunc(webHandler.Home))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))
-	mux.Handle("GET /healthz", http.HandlerFunc(health.Live))
-	mux.Handle("GET /readyz", http.HandlerFunc(health.Ready))
-	mux.Handle("GET /api/v1/health", http.HandlerFunc(health.Live))
-
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.RequestID(httpapi.RequestLogger(logger)(httpapi.Recoverer(logger)(mux))),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -70,7 +64,7 @@ func run() error {
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("http server listening", "addr", cfg.HTTPAddr)
-		errCh <- server.ListenAndServe()
+		errCh <- httpServer.ListenAndServe()
 	}()
 
 	select {
@@ -84,7 +78,7 @@ func run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := server.Shutdown(shutdownCtx); err != nil {
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shut down HTTP server: %w", err)
 		}
 		return nil

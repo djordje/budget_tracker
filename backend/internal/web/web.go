@@ -2,7 +2,7 @@
 package web
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -13,8 +13,24 @@ import (
 	"strings"
 	"time"
 
+	"budgettracker/internal/auth"
 	site "budgettracker/web"
 )
+
+// SessionService is the authentication behavior needed by HTML handlers.
+type SessionService interface {
+	Register(ctx context.Context, params auth.RegisterParams) (auth.Session, error)
+	Login(ctx context.Context, email, password string) (auth.Session, error)
+	DeleteSession(ctx context.Context, rawToken string) error
+}
+
+// Deps contains the dependencies needed by the HTML application.
+type Deps struct {
+	Logger    *slog.Logger
+	Sessions  SessionService
+	Cookies   auth.CookieConfig
+	StaticDir string
+}
 
 // Handler serves the HTML pages and static assets.
 type Handler struct {
@@ -23,32 +39,36 @@ type Handler struct {
 	staticFS fs.FS
 	logger   *slog.Logger
 	year     int
-}
-
-type pageData struct {
-	Title string
-	Year  int
+	sessions SessionService
+	cookies  auth.CookieConfig
 }
 
 // New parses the embedded templates and prepares the static file handler. A
 // non-empty staticDir serves assets from disk for local development; otherwise
 // the embedded assets are used.
-func New(logger *slog.Logger, staticDir string) (*Handler, error) {
+func New(deps Deps) (*Handler, error) {
+	if deps.Logger == nil {
+		deps.Logger = slog.Default()
+	}
+	if deps.Sessions == nil {
+		return nil, fmt.Errorf("session service is required")
+	}
+
 	pages, err := parsePages(site.Templates)
 	if err != nil {
 		return nil, err
 	}
 
 	var staticRoot fs.FS
-	if staticDir != "" {
-		info, err := os.Stat(staticDir)
+	if deps.StaticDir != "" {
+		info, err := os.Stat(deps.StaticDir)
 		if err != nil {
-			return nil, fmt.Errorf("open static directory %q: %w", staticDir, err)
+			return nil, fmt.Errorf("open static directory %q: %w", deps.StaticDir, err)
 		}
 		if !info.IsDir() {
-			return nil, fmt.Errorf("static path %q is not a directory", staticDir)
+			return nil, fmt.Errorf("static path %q is not a directory", deps.StaticDir)
 		}
-		staticRoot = os.DirFS(staticDir)
+		staticRoot = os.DirFS(deps.StaticDir)
 	} else {
 		staticRoot, err = fs.Sub(site.Static, "static")
 		if err != nil {
@@ -60,8 +80,10 @@ func New(logger *slog.Logger, staticDir string) (*Handler, error) {
 		pages:    pages,
 		static:   http.FileServer(http.FS(staticRoot)),
 		staticFS: staticRoot,
-		logger:   logger,
+		logger:   deps.Logger,
 		year:     time.Now().Year(),
+		sessions: deps.Sessions,
+		cookies:  deps.Cookies,
 	}, nil
 }
 
@@ -92,14 +114,6 @@ func parsePages(fsys fs.FS) (map[string]*template.Template, error) {
 	return pages, nil
 }
 
-// Home serves the application landing page.
-func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "home", pageData{
-		Title: "Budget Tracker",
-		Year:  h.year,
-	})
-}
-
 // Static serves static assets. Directory listings, trailing-slash paths, and
 // any path segment beginning with a dot are not exposed, including root-level
 // and nested dotfiles.
@@ -123,27 +137,4 @@ func (h *Handler) Static() http.Handler {
 		}
 		h.static.ServeHTTP(w, r)
 	})
-}
-
-func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {
-	tmpl, ok := h.pages[page]
-	if !ok {
-		h.logger.Error("page template not found", "page", page)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	var body bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&body, "layout", data); err != nil {
-		h.logger.Error("render page", "page", page, "path", r.URL.Path, "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	if _, err := body.WriteTo(w); err != nil {
-		h.logger.Error("write page", "page", page, "path", r.URL.Path, "error", err)
-	}
 }

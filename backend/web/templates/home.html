@@ -9,6 +9,20 @@
       Record income and spending in the currencies you actually use, then see
       personal and household totals without mixing up who spent what.
     </p>
+    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+      {{if .Authenticated}}
+        <a href="/app" class="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white shadow-sm hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+          Open dashboard
+        </a>
+      {{else}}
+        <a href="/register" class="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white shadow-sm hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+          Create account
+        </a>
+        <a href="/login" class="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+          Sign in
+        </a>
+      {{end}}
+    </div>
   </div>
 
   <div class="mt-12 grid gap-4 sm:grid-cols-3">
@@ -33,11 +47,10 @@
   </div>
 
   <div class="mt-12 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 sm:p-8">
-    <h2 class="text-xl font-semibold text-emerald-950">The foundation is ready</h2>
+    <h2 class="text-xl font-semibold text-emerald-950">Start with your account</h2>
     <p class="mt-2 max-w-2xl leading-7 text-emerald-900">
-      This early preview currently includes the application shell, health checks,
-      PostgreSQL, and migration tooling. Sign-in, households, entries, and reports
-      are the next milestones.
+      Create an account, then set up a household. Entries, exchange rates, and
+      reports follow in the next milestones.
     </p>
   </div>
 </section>

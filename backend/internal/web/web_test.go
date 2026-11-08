@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,11 +11,33 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"budgettracker/internal/auth"
 )
+
+type stubSessions struct {
+	session auth.Session
+	err     error
+}
+
+func (s stubSessions) Register(context.Context, auth.RegisterParams) (auth.Session, error) {
+	return s.session, s.err
+}
+
+func (s stubSessions) Login(context.Context, string, string) (auth.Session, error) {
+	return s.session, s.err
+}
+
+func (s stubSessions) DeleteSession(context.Context, string) error {
+	return s.err
+}
 
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), "")
+	handler, err := New(Deps{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions: stubSessions{},
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -25,7 +48,7 @@ func TestHome(t *testing.T) {
 	handler := newTestHandler(t)
 	recorder := httptest.NewRecorder()
 
-	handler.Home(recorder, httptest.NewRequest(http.MethodGet, "/app", nil))
+	handler.Home(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -42,10 +65,52 @@ func TestHome(t *testing.T) {
 		`href="/static/css/app.css"`,
 		`href="/static/favicon.svg"`,
 		"Skip to content",
+		`href="/register"`,
+		`href="/login"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body does not contain %q", want)
 		}
+	}
+}
+
+func TestAuthPagesRenderForms(t *testing.T) {
+	handler := newTestHandler(t)
+
+	tests := []struct {
+		name   string
+		path   string
+		handle http.HandlerFunc
+		want   []string
+	}{
+		{
+			name:   "login",
+			path:   "/login",
+			handle: handler.LoginPage,
+			want:   []string{"Sign in", `action="/login"`, `name="email"`, `name="password"`, `name="csrf_token"`},
+		},
+		{
+			name:   "register",
+			path:   "/register",
+			handle: handler.RegisterPage,
+			want:   []string{"Create your account", `action="/register"`, `name="first_name"`, `name="last_name"`, `name="password_confirm"`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			tt.handle(recorder, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			body := recorder.Body.String()
+			for _, want := range tt.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("body does not contain %q", want)
+				}
+			}
+		})
 	}
 }
 
@@ -111,7 +176,11 @@ func TestStaticRejectsDotfilesAndDirectories(t *testing.T) {
 		}
 	}
 
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), staticDir)
+	handler, err := New(Deps{
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:  stubSessions{},
+		StaticDir: staticDir,
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -149,7 +218,11 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 		t.Fatalf("write static fixture: %v", err)
 	}
 
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), staticDir)
+	handler, err := New(Deps{
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:  stubSessions{},
+		StaticDir: staticDir,
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -173,7 +246,17 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 
 func TestNewRejectsMissingStaticDirectory(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	if _, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), missing); err == nil {
+	if _, err := New(Deps{
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:  stubSessions{},
+		StaticDir: missing,
+	}); err == nil {
+		t.Fatal("New() error = nil, want error")
+	}
+}
+
+func TestNewRequiresSessionService(t *testing.T) {
+	if _, err := New(Deps{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
 }

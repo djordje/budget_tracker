@@ -35,3 +35,12 @@ type ErrorDetail struct {
 func WriteError(w http.ResponseWriter, status int, code, message string) {
 	WriteJSON(w, status, ErrorResponse{Error: ErrorDetail{Code: code, Message: message}})
 }
+
+// WriteValidationError writes a field-level JSON validation error.
+func WriteValidationError(w http.ResponseWriter, fields map[string]string) {
+	WriteJSON(w, http.StatusUnprocessableEntity, ErrorResponse{Error: ErrorDetail{
+		Code:    "validation_failed",
+		Message: "Some fields are invalid.",
+		Fields:  fields,
+	}})
+}
