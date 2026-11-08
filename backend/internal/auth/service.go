@@ -32,6 +32,9 @@ var (
 	ErrEmailTaken = errors.New("email already registered")
 	// ErrSessionNotFound indicates that a token is missing, revoked, or expired.
 	ErrSessionNotFound = errors.New("session not found")
+	// ErrHouseholdAccess indicates that a session cannot select a household the
+	// user does not belong to.
+	ErrHouseholdAccess = errors.New("household access denied")
 )
 
 // User is the public profile attached to a session.
@@ -47,10 +50,12 @@ type User struct {
 // Session represents an authenticated browser or API session. Token is only
 // populated when a session is created; lookups return an empty Token.
 type Session struct {
-	UserID    uuid.UUID
-	Token     string
-	User      User
-	ExpiresAt time.Time
+	UserID            uuid.UUID
+	Token             string
+	TokenHash         string
+	User              User
+	ExpiresAt         time.Time
+	ActiveHouseholdID *uuid.UUID
 }
 
 // RegisterParams contains the fields accepted by registration.
@@ -189,7 +194,8 @@ func (s *Service) SessionByToken(ctx context.Context, rawToken string) (Session,
 	var session Session
 	err := s.pool.QueryRow(ctx, `
 		SELECT s.user_id, s.expires_at,
-		       u.first_name, u.last_name, c.email_normalized, u.created_at, u.updated_at
+		       u.first_name, u.last_name, c.email_normalized, u.created_at, u.updated_at,
+		       s.active_household_id
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		JOIN auth_credentials c ON c.user_id = s.user_id
@@ -199,6 +205,7 @@ func (s *Service) SessionByToken(ctx context.Context, rawToken string) (Session,
 		&session.UserID, &session.ExpiresAt,
 		&session.User.FirstName, &session.User.LastName, &session.User.Email,
 		&session.User.CreatedAt, &session.User.UpdatedAt,
+		&session.ActiveHouseholdID,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, ErrSessionNotFound
@@ -207,6 +214,7 @@ func (s *Service) SessionByToken(ctx context.Context, rawToken string) (Session,
 		return Session{}, fmt.Errorf("look up session: %w", err)
 	}
 	session.User.ID = session.UserID
+	session.TokenHash = tokenHash
 
 	if !time.Now().UTC().Before(session.ExpiresAt) {
 		_, _ = s.pool.Exec(ctx, "DELETE FROM sessions WHERE token_hash = $1", tokenHash)
@@ -258,6 +266,40 @@ func (s *Service) DeleteSession(ctx context.Context, rawToken string) error {
 	return nil
 }
 
+// SetActiveHousehold updates the session preference. Passing nil clears the
+// active household. The user must belong to the selected household.
+func (s *Service) SetActiveHousehold(ctx context.Context, tokenHash string, userID uuid.UUID, householdID *uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE sessions s
+		SET active_household_id = $3
+		WHERE s.token_hash = $1 AND s.user_id = $2
+		  AND ($3::uuid IS NULL OR EXISTS (
+		      SELECT 1
+		      FROM household_memberships m
+		      WHERE m.household_id = $3 AND m.user_id = $2
+		  ))`,
+		tokenHash, userID, householdID,
+	)
+	if err != nil {
+		return fmt.Errorf("set active household: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+
+	var sessionExists bool
+	if err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM sessions WHERE token_hash = $1 AND user_id = $2)`,
+		tokenHash, userID,
+	).Scan(&sessionExists); err != nil {
+		return fmt.Errorf("check session: %w", err)
+	}
+	if !sessionExists {
+		return ErrSessionNotFound
+	}
+	return ErrHouseholdAccess
+}
+
 type queryRower interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
@@ -289,6 +331,7 @@ func insertSession(
 	return Session{
 		UserID:    user.ID,
 		Token:     rawToken,
+		TokenHash: tokenHash,
 		User:      user,
 		ExpiresAt: expiresAt,
 	}, nil
