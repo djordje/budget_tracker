@@ -8,8 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 2 (income and spending) is complete. The next milestone
-adds exchange rates and converted reports.
+**Status:** Milestone 3 (exchange rates and summaries) is complete. The next
+milestone adds invitations, preferences, and UX polish.
 
 ## Requirements
 
@@ -125,6 +125,8 @@ Current HTML routes:
 /app/spendings/new             add spending
 /app/incomes/{id}/edit         edit income
 /app/spendings/{id}/edit       edit spending
+/app/exchange-rates            manage exact and monthly rates
+/app/reports                   converted household summary
 ```
 
 Current JSON endpoints (cookie authentication, CSRF header on unsafe methods):
@@ -146,6 +148,11 @@ POST /api/v1/spendings
 GET  /api/v1/spendings/{id}
 PATCH /api/v1/spendings/{id}
 DELETE /api/v1/spendings/{id}
+GET  /api/v1/exchange-rates
+POST /api/v1/exchange-rates
+PATCH /api/v1/exchange-rates/{id}
+DELETE /api/v1/exchange-rates/{id}
+GET  /api/v1/reports/summary?from=&to=&currency=&scope=&household_id=
 ```
 
 Entry lists accept `scope=mine|all`, `from`, `to`, `page`, and `page_size`.
@@ -167,6 +174,22 @@ service call. Unrepresentable pagination offsets and invalid UTF-8 or NUL in
 descriptions return validation feedback instead of database errors. Failed
 HTMX deletes return an error fragment with the original status rather than a
 success notice.
+
+## Exchange rates and reports
+
+Households maintain exact-date and monthly exchange rates. Exact-date rates
+apply only on their date; monthly rates apply across their calendar month.
+Direct rates take precedence over inferred inverses, and conversion never
+chains currencies. All members can manage rates. Exchange-rate IDs use the
+same positive integer route and decimal-string JSON representation as entries.
+
+The report page and `GET /api/v1/reports/summary` convert entries into a chosen
+display currency. Each summary is one database snapshot: display options,
+currencies, entries, and rates are read in a read-only `REPEATABLE READ`
+transaction. Totals are incomplete and list the missing currency pairs and
+entry dates when a required rate is unavailable; affected entries are never
+treated as zero. Admins can switch between their data and the whole household;
+members see only their own data.
 
 ## Frontend assets
 
@@ -200,10 +223,11 @@ backend/
   db/migrations/       numbered SQL migrations
   internal/auth/       credentials, sessions, cookies, and middleware
   internal/config/     environment configuration
-  internal/finance/    currencies, money, and entry services
+  internal/finance/    currencies, money, entries, and exchange rates
   internal/households/ household services and authorization
   internal/httpapi/    JSON handlers, health, CSRF, and middleware
   internal/logging/    structured logging setup
+  internal/reporting/  exact conversion and summary reports
   internal/server/     HTTP composition and route registration
   internal/store/      PostgreSQL pool, transactions, and migration runner
   internal/testdb/     isolated PostgreSQL schemas for integration tests

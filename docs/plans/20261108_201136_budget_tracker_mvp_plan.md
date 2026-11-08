@@ -428,7 +428,7 @@ Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP
 | 0 — Project bootstrap | Complete on 2026-11-08 |
 | 1 — Identity and household vertical slice | Complete on 2026-11-08 |
 | 2 — Income and spending | Complete on 2026-11-08 |
-| 3 — Exchange rates and summaries | Not started |
+| 3 — Exchange rates and summaries | Complete on 2026-11-08 |
 | 4 — Invitations, preferences, and UX polish | Not started |
 | 5 — Local quality and handoff | Not started |
 
@@ -450,3 +450,10 @@ authorization, JSON CRUD endpoints, responsive entry forms and lists, filters,
 pagination, empty states, and progressive HTMX updates. Household-wide entries
 are admin-only to create, view, edit, and delete; members manage personal
 entries only. See ADR 0006 for the full attribution rules.
+
+Milestone 3 adds household exact-date and monthly exchange rates, direct and
+inferred-inverse resolution with no chaining, exact rational conversion with
+half-even display rounding, mine/all summaries, and report warnings that name
+missing currency pairs and entry dates. Rate management, summary JSON, rate
+management HTML, and report HTML are covered by unit and integration tests.
+See ADR 0007.
