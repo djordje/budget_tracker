@@ -20,7 +20,12 @@ type Currency struct {
 
 // Currencies lists all supported currencies by code.
 func (s *Service) Currencies(ctx context.Context) ([]Currency, error) {
-	rows, err := s.pool.Query(ctx, `
+	return s.CurrenciesTx(ctx, s.pool)
+}
+
+// CurrenciesTx lists supported currencies using the provided query source.
+func (s *Service) CurrenciesTx(ctx context.Context, db Querier) ([]Currency, error) {
+	rows, err := db.Query(ctx, `
 		SELECT code, numeric_code, name, minor_units
 		FROM currencies
 		ORDER BY code`)
@@ -44,7 +49,11 @@ func (s *Service) Currencies(ctx context.Context) ([]Currency, error) {
 }
 
 func (s *Service) currencyByCode(ctx context.Context, code string) (Currency, error) {
-	row := s.pool.QueryRow(ctx, `
+	return s.currencyByCodeTx(ctx, s.pool, code)
+}
+
+func (s *Service) currencyByCodeTx(ctx context.Context, db Querier, code string) (Currency, error) {
+	row := db.QueryRow(ctx, `
 		SELECT code, numeric_code, name, minor_units
 		FROM currencies
 		WHERE code = $1`, code)

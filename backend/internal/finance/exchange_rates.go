@@ -55,10 +55,15 @@ type UpdateExchangeRateParams struct {
 
 // ListExchangeRates returns the household's rates to a member.
 func (s *Service) ListExchangeRates(ctx context.Context, actorID, householdID uuid.UUID) ([]ExchangeRate, error) {
-	if _, err := s.membership(ctx, householdID, actorID); err != nil {
+	return s.ListExchangeRatesTx(ctx, s.pool, actorID, householdID)
+}
+
+// ListExchangeRatesTx reads rates through the provided query source.
+func (s *Service) ListExchangeRatesTx(ctx context.Context, db Querier, actorID, householdID uuid.UUID) ([]ExchangeRate, error) {
+	if _, err := s.membershipTx(ctx, db, householdID, actorID); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		SELECT id, household_id, from_currency_code, to_currency_code, rate::text,
 		       rate_date, is_monthly, created_at, updated_at
 		FROM exchange_rates

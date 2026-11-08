@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgettracker/internal/households"
@@ -172,6 +173,14 @@ type ListResult struct {
 	PageSize   int
 	Total      int
 	TotalPages int
+}
+
+// Querier is the shared read interface implemented by the pool and a
+// transaction. Reporting uses it to keep every summary read in one snapshot.
+type Querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // Service owns entry persistence, defaults, and authorization.
@@ -514,8 +523,12 @@ func (s *Service) List(ctx context.Context, params ListParams) (ListResult, erro
 }
 
 func (s *Service) membership(ctx context.Context, householdID, userID uuid.UUID) (households.Role, error) {
+	return s.membershipTx(ctx, s.pool, householdID, userID)
+}
+
+func (s *Service) membershipTx(ctx context.Context, db Querier, householdID, userID uuid.UUID) (households.Role, error) {
 	var role string
-	err := s.pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT role
 		FROM household_memberships
 		WHERE household_id = $1 AND user_id = $2`,
