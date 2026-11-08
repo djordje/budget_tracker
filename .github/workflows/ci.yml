@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Format, lint, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: budget
+          POSTGRES_DB: budget_tracker
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U budget -d budget_tracker"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://budget@localhost:5432/budget_tracker?sslmode=disable
+      TEST_DATABASE_URL: postgres://budget@localhost:5432/budget_tracker?sslmode=disable
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install mise tools
+        uses: jdx/mise-action@v5
+
+      - name: Install dependencies
+        run: mise run deps
+
+      - name: Apply database migrations
+        run: mise run db:migrate
+
+      - name: Run all checks
+        run: mise run check:all

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -17,10 +18,11 @@ import (
 
 // Handler serves the HTML pages and static assets.
 type Handler struct {
-	pages  map[string]*template.Template
-	static http.Handler
-	logger *slog.Logger
-	year   int
+	pages    map[string]*template.Template
+	static   http.Handler
+	staticFS fs.FS
+	logger   *slog.Logger
+	year     int
 }
 
 type pageData struct {
@@ -28,23 +30,38 @@ type pageData struct {
 	Year  int
 }
 
-// New parses the embedded templates and prepares the static file handler.
-func New(logger *slog.Logger) (*Handler, error) {
+// New parses the embedded templates and prepares the static file handler. A
+// non-empty staticDir serves assets from disk for local development; otherwise
+// the embedded assets are used.
+func New(logger *slog.Logger, staticDir string) (*Handler, error) {
 	pages, err := parsePages(site.Templates)
 	if err != nil {
 		return nil, err
 	}
 
-	staticRoot, err := fs.Sub(site.Static, "static")
-	if err != nil {
-		return nil, fmt.Errorf("open static assets: %w", err)
+	var staticRoot fs.FS
+	if staticDir != "" {
+		info, err := os.Stat(staticDir)
+		if err != nil {
+			return nil, fmt.Errorf("open static directory %q: %w", staticDir, err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("static path %q is not a directory", staticDir)
+		}
+		staticRoot = os.DirFS(staticDir)
+	} else {
+		staticRoot, err = fs.Sub(site.Static, "static")
+		if err != nil {
+			return nil, fmt.Errorf("open static assets: %w", err)
+		}
 	}
 
 	return &Handler{
-		pages:  pages,
-		static: http.FileServer(http.FS(staticRoot)),
-		logger: logger,
-		year:   time.Now().Year(),
+		pages:    pages,
+		static:   http.FileServer(http.FS(staticRoot)),
+		staticFS: staticRoot,
+		logger:   logger,
+		year:     time.Now().Year(),
 	}, nil
 }
 
@@ -83,9 +100,29 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Static serves the embedded static assets.
+// Static serves static assets. Directory listings, trailing-slash paths, and
+// any path segment beginning with a dot are not exposed, including root-level
+// and nested dotfiles.
 func (h *Handler) Static() http.Handler {
-	return h.static
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assetPath := strings.TrimPrefix(r.URL.Path, "/")
+		if assetPath == "" || strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		for _, segment := range strings.Split(assetPath, "/") {
+			if segment == "" || strings.HasPrefix(segment, ".") {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		info, err := fs.Stat(h.staticFS, assetPath)
+		if err != nil || info.IsDir() {
+			http.NotFound(w, r)
+			return
+		}
+		h.static.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, data any) {

@@ -420,3 +420,20 @@ Prioritize based on actual use: categories/tags, budgets, recurring entries, glo
 10. **Local environment:** Skip deployment in this phase. Run PostgreSQL in a Docker container through Compose and manage Go and development tasks with `mise`.
 
 Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP features in detail before the first end-to-end workflow is usable.
+
+## 12. Implementation status
+
+| Milestone | Status |
+| --- | --- |
+| 0 — Project bootstrap | Complete on 2026-11-08 |
+| 1 — Identity and household vertical slice | Not started |
+| 2 — Income and spending | Not started |
+| 3 — Exchange rates and summaries | Not started |
+| 4 — Invitations, preferences, and UX polish | Not started |
+| 5 — Local quality and handoff | Not started |
+
+Milestone 0 provides the mise task runner, Go module, local PostgreSQL
+Compose service, embedded SQL migration runner, JSON health endpoints,
+server-rendered application shell, build-time Tailwind CSS, structured
+logging, and CI. The local setup and check commands are documented in the
+repository README.

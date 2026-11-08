@@ -8,7 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 0 (project bootstrap) is in progress.
+**Status:** Milestone 0 (project bootstrap) is complete. The next milestone
+adds identity, authentication, and households.
 
 ## Requirements
 
@@ -28,7 +29,8 @@ mise run run
 `setup` copies `.env.example` to `.env` when needed, installs dependencies,
 compiles Tailwind CSS, starts PostgreSQL, and applies migrations. The
 application shell is available at <http://localhost:8080/app>. Health checks are
-served at `/healthz`, `/readyz`, and `/api/v1/health`.
+served at `/healthz` (liveness), `/readyz` (database readiness), and
+`/api/v1/health` (versioned liveness alias).
 
 Other development tasks:
 
@@ -65,8 +67,37 @@ startup. `APP_ENV` accepts only `development` or `production`; `LOG_LEVEL`
 accepts `debug`, `info`, `warn`, or `error`. `WEB_STATIC_DIR` is optional and
 empty by default.
 
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `APP_ENV` | `development` | `development` or `production`; `production` uses JSON logs. |
+| `HTTP_ADDR` | `:8080` | HTTP listen address. |
+| `DATABASE_URL` | required | Required in every environment; never commit a real URL. |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
+| `WEB_STATIC_DIR` | empty | Optional absolute path for disk assets; empty uses the embedded copies. |
+| `TEST_DATABASE_URL` | local Compose URL | Used by PostgreSQL integration tests. |
+
 The Compose PostgreSQL instance binds to `127.0.0.1:5433` and uses trust
 authentication for local development only. It is not intended for production.
+
+## Testing
+
+Unit tests do not require PostgreSQL:
+
+```sh
+mise run test
+```
+
+Integration tests run against a real database and create isolated schemas, so
+they do not disturb development data:
+
+```sh
+mise run db:up
+mise run test:integration
+```
+
+`mise run check` covers formatting, linting, unit tests, and a build.
+`mise run check:all` adds the PostgreSQL integration tests. CI runs the same
+migration and check tasks on every push and pull request.
 
 ## Frontend assets
 
@@ -74,8 +105,9 @@ Tailwind CSS is compiled at build time from
 `backend/web/assets/input.css` into
 `backend/web/static/css/app.css`. The generated CSS is ignored by git and is
 embedded in the Go executable. `mise run run` and `mise run build` rebuild it
-automatically; use `mise run css:watch` in a second terminal while iterating on
-templates.
+automatically. In development, `mise run run` serves assets from disk, so
+`mise run css:watch` updates styling without restarting the server. Production
+builds use the embedded copies.
 
 ## Database migrations
 
@@ -88,6 +120,24 @@ already been applied. Add a new migration instead.
 mise run db:migrate  # apply pending migrations
 mise run db:status   # list applied and pending migrations
 mise run db:reset    # destroy and recreate the local database
+```
+
+## Project structure
+
+```text
+backend/
+  cmd/server/          HTTP server entrypoint
+  cmd/migrate/         migration command
+  db/migrations/       numbered SQL migrations
+  internal/config/     environment configuration
+  internal/httpapi/    health, JSON, and HTTP middleware
+  internal/logging/    structured logging setup
+  internal/store/      PostgreSQL pool and migration runner
+  internal/web/        HTML handlers and template rendering
+  web/                 templates, Tailwind source, and static assets
+docs/
+  decisions/           architecture decision records
+  plans/               implementation plan and planning conventions
 ```
 
 ## Documentation

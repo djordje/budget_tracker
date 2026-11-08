@@ -54,7 +54,7 @@ fi
 
 [tasks.lint]
 description = "Run static analysis"
-run = "cd backend && go vet ./..."
+run = "cd backend && go vet ./... && go vet -tags=integration ./..."
 
 [tasks.test]
 description = "Run unit tests"
@@ -63,7 +63,7 @@ run = "cd backend && go test ./..."
 [tasks.run]
 description = "Run the HTTP server"
 depends = ["css:build"]
-run = "cd backend && go run ./cmd/server"
+run = "cd backend && WEB_STATIC_DIR=\"${WEB_STATIC_DIR:-web/static}\" go run ./cmd/server"
 
 [tasks.build]
 description = "Build the server executable"

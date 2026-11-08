@@ -45,7 +45,7 @@ func run() error {
 
 	health := httpapi.NewHealth(db, logger)
 
-	webHandler, err := web.New(logger)
+	webHandler, err := web.New(logger, cfg.StaticDir)
 	if err != nil {
 		return fmt.Errorf("create web handler: %w", err)
 	}
