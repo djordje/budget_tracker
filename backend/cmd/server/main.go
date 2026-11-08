@@ -15,6 +15,7 @@ import (
 	"budgettracker/internal/httpapi"
 	"budgettracker/internal/logging"
 	"budgettracker/internal/store"
+	"budgettracker/internal/web"
 )
 
 func main() {
@@ -44,7 +45,15 @@ func run() error {
 
 	health := httpapi.NewHealth(db, logger)
 
+	webHandler, err := web.New(logger)
+	if err != nil {
+		return fmt.Errorf("create web handler: %w", err)
+	}
+
 	mux := http.NewServeMux()
+	mux.Handle("GET /{$}", http.RedirectHandler("/app", http.StatusPermanentRedirect))
+	mux.Handle("GET /app", http.HandlerFunc(webHandler.Home))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))
 	mux.Handle("GET /healthz", http.HandlerFunc(health.Live))
 	mux.Handle("GET /readyz", http.HandlerFunc(health.Ready))
 	mux.Handle("GET /api/v1/health", http.HandlerFunc(health.Live))

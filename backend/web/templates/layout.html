@@ -1,0 +1,45 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" class="h-full bg-stone-50">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="A clear, shared view of your household's income and spending.">
+    <title>{{.Title}}</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/css/app.css">
+  </head>
+  <body class="flex min-h-full flex-col text-stone-900 antialiased">
+    <a href="#main" class="sr-only rounded-md bg-white px-4 py-2 font-semibold text-emerald-700 shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10">
+      Skip to content
+    </a>
+
+    <header class="border-b border-stone-200 bg-white">
+      <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <a href="/app" class="flex items-center gap-3 rounded-lg font-semibold tracking-tight text-stone-900">
+          <span class="grid size-9 place-items-center rounded-xl bg-emerald-700 text-white shadow-sm" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" class="size-5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+              <path d="M4 19V11M10 19V7M16 19V4M22 19H2"/>
+            </svg>
+          </span>
+          Budget Tracker
+        </a>
+        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-600/20">
+          Early preview
+        </span>
+      </div>
+    </header>
+
+    <main id="main" class="flex-1">
+      {{template "content" .}}
+    </main>
+
+    <footer class="border-t border-stone-200 bg-white">
+      <div class="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-6 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <p>&copy; {{.Year}} Budget Tracker</p>
+        <p>Built for shared household money.</p>
+      </div>
+    </footer>
+  </body>
+</html>
+{{end}}

@@ -6,9 +6,31 @@ node = "24.14.0"
 # Local overrides live in .env, which is ignored by git. Missing files are fine.
 _.file = ".env"
 
+[tasks.setup]
+description = "Prepare the local development environment"
+run = [
+  "test -f .env || cp .env.example .env",
+  "mise install",
+  "mise run deps",
+  "mise run css:build",
+  "mise run db:up",
+  "mise run db:migrate",
+]
+
 [tasks.deps]
-description = "Download backend dependencies"
-run = "cd backend && go mod download"
+description = "Download Go modules and install frontend dependencies"
+run = [
+  "cd backend && go mod download",
+  "cd backend && npm ci",
+]
+
+[tasks."css:build"]
+description = "Compile Tailwind CSS"
+run = "cd backend && npm run css:build"
+
+[tasks."css:watch"]
+description = "Rebuild Tailwind CSS while editing templates"
+run = "cd backend && npm run css:watch"
 
 [tasks.tidy]
 description = "Tidy the Go module"
@@ -40,10 +62,12 @@ run = "cd backend && go test ./..."
 
 [tasks.run]
 description = "Run the HTTP server"
+depends = ["css:build"]
 run = "cd backend && go run ./cmd/server"
 
 [tasks.build]
 description = "Build the server executable"
+depends = ["css:build"]
 run = "mkdir -p bin && cd backend && go build -trimpath -ldflags \"-s -w -X budgettracker/internal/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)\" -o ../bin/budget-tracker ./cmd/server"
 
 [tasks."db:up"]
