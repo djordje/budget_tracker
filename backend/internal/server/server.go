@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/households"
 	"budgettracker/internal/httpapi"
 	"budgettracker/internal/web"
 )
@@ -27,6 +28,7 @@ func New(deps Deps) (http.Handler, error) {
 	}
 
 	authService := auth.NewService(deps.DB)
+	householdService := households.NewService(deps.DB)
 	cookies := auth.CookieConfig{Secure: deps.SecureCookies}
 	csrf := httpapi.NewCSRF(httpapi.CSRFConfig{Secure: deps.SecureCookies})
 	sessions := auth.NewMiddleware(authService, cookies, deps.Logger)
@@ -41,6 +43,7 @@ func New(deps Deps) (http.Handler, error) {
 		return nil, err
 	}
 	health := httpapi.NewHealth(deps.DB, deps.Logger)
+	householdAPI := httpapi.NewHouseholdHandler(householdService, deps.Logger)
 
 	protected := http.NewServeMux()
 	protected.Handle("GET /{$}", http.HandlerFunc(webHandler.Home))
@@ -50,6 +53,11 @@ func New(deps Deps) (http.Handler, error) {
 	protected.Handle("POST /register", http.HandlerFunc(webHandler.Register))
 	protected.Handle("POST /logout", web.RequireAuth(webHandler.Logout))
 	protected.Handle("GET /app", web.RequireAuth(webHandler.Dashboard))
+	protected.Handle("GET /api/v1/households", httpapi.RequireAuthAPI(householdAPI.List))
+	protected.Handle("POST /api/v1/households", httpapi.RequireAuthAPI(householdAPI.Create))
+	protected.Handle("GET /api/v1/households/{householdID}", httpapi.RequireAuthAPI(householdAPI.Get))
+	protected.Handle("GET /api/v1/households/{householdID}/members", httpapi.RequireAuthAPI(householdAPI.Members))
+	protected.Handle("GET /api/v1/households/{householdID}/options", httpapi.RequireAuthAPI(householdAPI.Options))
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))

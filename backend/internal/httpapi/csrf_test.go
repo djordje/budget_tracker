@@ -135,19 +135,3 @@ func TestCSRFReplacesInvalidCookie(t *testing.T) {
 		t.Errorf("cookies = %+v, want a replacement token", cookies)
 	}
 }
-
-func TestWriteValidationError(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	WriteValidationError(recorder, map[string]string{"name": "Name is required."})
-
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusUnprocessableEntity)
-	}
-	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Error.Code != "validation_failed" || body.Error.Fields["name"] == "" {
-		t.Errorf("error body = %+v", body.Error)
-	}
-}

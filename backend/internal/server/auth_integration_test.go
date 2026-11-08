@@ -29,7 +29,11 @@ type testClient struct {
 
 func newTestClient(t *testing.T) *testClient {
 	t.Helper()
-	pool := testdb.New(t)
+	return newTestClientWithPool(t, testdb.New(t))
+}
+
+func newTestClientWithPool(t *testing.T, pool *pgxpool.Pool) *testClient {
+	t.Helper()
 	handler, err := New(Deps{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		DB:     pool,

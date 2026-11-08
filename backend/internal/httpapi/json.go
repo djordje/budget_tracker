@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 )
 
 // WriteJSON writes a JSON response with the standard content type and status.
@@ -43,4 +46,23 @@ func WriteValidationError(w http.ResponseWriter, fields map[string]string) {
 		Message: "Some fields are invalid.",
 		Fields:  fields,
 	}})
+}
+
+// decodeJSON decodes exactly one JSON object with a bounded body size.
+func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
+	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		return errors.New("content type must be application/json")
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("request body must contain a single JSON object")
+	}
+	return nil
 }
