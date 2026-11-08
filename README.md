@@ -23,6 +23,7 @@ Install the pinned toolchain, start the local database, and run the server:
 mise install
 mise run deps
 mise run db:up
+mise run db:migrate
 mise run run
 ```
 
@@ -36,6 +37,7 @@ mise run format      # format Go source
 mise run lint        # run go vet
 mise run test        # run unit tests
 mise run build       # build bin/budget-tracker
+mise run db:status   # show applied and pending migrations
 mise run db:down     # stop local PostgreSQL
 ```
 
@@ -43,6 +45,13 @@ mise run db:down     # stop local PostgreSQL
 
 ```sh
 mise run check
+```
+
+With PostgreSQL running, `check:all` also runs the database integration tests:
+
+```sh
+mise run test:integration
+mise run check:all
 ```
 
 Configuration is read from the environment. [.env.example](.env.example)
@@ -56,6 +65,19 @@ empty by default.
 
 The Compose PostgreSQL instance binds to `127.0.0.1:5433` and uses trust
 authentication for local development only. It is not intended for production.
+
+## Database migrations
+
+Migrations are numbered SQL files in `backend/db/migrations` named
+`NNNN_description.sql`, applied in version order. Applied versions and their
+checksums are tracked in `schema_migrations`; never edit a migration that has
+already been applied. Add a new migration instead.
+
+```sh
+mise run db:migrate  # apply pending migrations
+mise run db:status   # list applied and pending migrations
+mise run db:reset    # destroy and recreate the local database
+```
 
 ## Documentation
 

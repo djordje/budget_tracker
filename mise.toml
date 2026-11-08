@@ -58,11 +58,41 @@ run = "docker compose down"
 description = "Follow local PostgreSQL logs"
 run = "docker compose logs -f postgres"
 
+[tasks."db:migrate"]
+description = "Apply pending database migrations"
+run = "cd backend && go run ./cmd/migrate up"
+
+[tasks."db:status"]
+description = "Show applied and pending database migrations"
+run = "cd backend && go run ./cmd/migrate status"
+
+[tasks."db:reset"]
+description = "Recreate the local database and apply migrations"
+run = [
+  "docker compose down -v",
+  "mise run db:up",
+  "mise run db:migrate",
+]
+
+[tasks."test:integration"]
+description = "Run tests against PostgreSQL"
+run = "cd backend && TEST_DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://budget@localhost:5433/budget_tracker?sslmode=disable}\" go test -tags=integration ./..."
+
 [tasks.check]
 description = "Run formatting, linting, tests, and a build"
 run = [
   "mise run format:check",
   "mise run lint",
   "mise run test",
+  "mise run build",
+]
+
+[tasks."check:all"]
+description = "Run all checks, including PostgreSQL integration tests"
+run = [
+  "mise run format:check",
+  "mise run lint",
+  "mise run test",
+  "mise run test:integration",
   "mise run build",
 ]
