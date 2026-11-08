@@ -263,3 +263,35 @@ func TestAuthenticatedVisitorsAreRedirectedFromAuthPages(t *testing.T) {
 		t.Errorf("GET /login = %d %q, want 303 /app", response.StatusCode, response.Header.Get("Location"))
 	}
 }
+
+func TestLoginThrottle(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "throttle@example.com")
+	response := client.postForm(t, "/logout", url.Values{"csrf_token": {csrf}})
+	readBody(t, response)
+	csrf = client.csrfToken(t, "/login")
+
+	for i := 0; i < 5; i++ {
+		response = client.postForm(t, "/login", url.Values{
+			"csrf_token": {csrf},
+			"email":      {"throttle@example.com"},
+			"password":   {"wrong password"},
+		})
+		body := readBody(t, response)
+		if response.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf("attempt %d = %d, body:\n%s", i+1, response.StatusCode, body)
+		}
+	}
+	response = client.postForm(t, "/login", url.Values{
+		"csrf_token": {csrf},
+		"email":      {"throttle@example.com"},
+		"password":   {"correct horse battery staple"},
+	})
+	body := readBody(t, response)
+	if response.StatusCode != http.StatusTooManyRequests || !strings.Contains(body, "Too many sign-in attempts") {
+		t.Fatalf("throttled login = %d, body:\n%s", response.StatusCode, body)
+	}
+	if response.Header.Get("Retry-After") != "900" {
+		t.Errorf("Retry-After = %q", response.Header.Get("Retry-After"))
+	}
+}

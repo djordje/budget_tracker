@@ -83,16 +83,17 @@ type Deps struct {
 
 // Handler serves the HTML pages and static assets.
 type Handler struct {
-	pages      map[string]*template.Template
-	static     http.Handler
-	staticFS   fs.FS
-	logger     *slog.Logger
-	sessions   SessionService
-	households HouseholdService
-	entries    EntryService
-	rates      RateService
-	reports    ReportService
-	cookies    auth.CookieConfig
+	pages        map[string]*template.Template
+	static       http.Handler
+	staticFS     fs.FS
+	logger       *slog.Logger
+	sessions     SessionService
+	households   HouseholdService
+	entries      EntryService
+	rates        RateService
+	reports      ReportService
+	loginLimiter *auth.LoginLimiter
+	cookies      auth.CookieConfig
 }
 
 // New parses the embedded templates and prepares the static file handler. A
@@ -141,16 +142,17 @@ func New(deps Deps) (*Handler, error) {
 	}
 
 	return &Handler{
-		pages:      pages,
-		static:     http.FileServer(http.FS(staticRoot)),
-		staticFS:   staticRoot,
-		logger:     deps.Logger,
-		sessions:   deps.Sessions,
-		households: deps.Households,
-		entries:    deps.Entries,
-		rates:      deps.Rates,
-		reports:    deps.Reports,
-		cookies:    deps.Cookies,
+		pages:        pages,
+		static:       http.FileServer(http.FS(staticRoot)),
+		staticFS:     staticRoot,
+		logger:       deps.Logger,
+		sessions:     deps.Sessions,
+		households:   deps.Households,
+		entries:      deps.Entries,
+		rates:        deps.Rates,
+		reports:      deps.Reports,
+		loginLimiter: auth.NewLoginLimiter(),
+		cookies:      deps.Cookies,
 	}, nil
 }
 

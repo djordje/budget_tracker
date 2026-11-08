@@ -429,7 +429,7 @@ Begin Milestone 0 with these decisions as the baseline. Avoid designing post-MVP
 | 1 — Identity and household vertical slice | Complete on 2026-11-08 |
 | 2 — Income and spending | Complete on 2026-11-08 |
 | 3 — Exchange rates and summaries | Complete on 2026-11-08 |
-| 4 — Invitations, preferences, and UX polish | Not started |
+| 4 — Invitations, preferences, and UX polish | Complete on 2026-11-08 |
 | 5 — Local quality and handoff | Not started |
 
 Milestone 0 provides the mise task runner, Go module, local PostgreSQL
@@ -457,3 +457,9 @@ half-even display rounding, mine/all summaries, and report warnings that name
 missing currency pairs and entry dates. Rate management, summary JSON, rate
 management HTML, and report HTML are covered by unit and integration tests.
 See ADR 0007.
+
+Milestone 4 adds secure single-use invitation links, public invitation
+acceptance with email matching and safe post-login redirects, admin
+invitation management, household currency-default settings, per-user currency
+inheritance, preference API and UI, mobile navigation, focus styling, and
+reduced-motion support. See ADR 0008.

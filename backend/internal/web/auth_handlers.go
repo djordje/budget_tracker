@@ -1,7 +1,10 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -57,6 +60,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
+	limiterKey := loginLimitKey(r, email)
+
+	if !h.loginLimiter.TryAcquire(limiterKey) {
+		w.Header().Set("Retry-After", "900")
+		h.render(w, r, "login", http.StatusTooManyRequests, loginPageData{
+			pageData:  h.basePageData(r, "Sign in"),
+			Email:     email,
+			Next:      safeNextPath(r.FormValue("next"), ""),
+			FormError: "Too many sign-in attempts. Try again in 15 minutes.",
+		})
+		return
+	}
 
 	session, err := h.sessions.Login(r.Context(), email, password)
 	if err != nil {
@@ -73,6 +88,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.loginLimiter.Reset(limiterKey)
 	h.cookies.Set(w, session.Token, session.ExpiresAt)
 	http.Redirect(w, r, safeNextPath(r.FormValue("next"), "/app"), http.StatusSeeOther)
 }
@@ -193,6 +209,15 @@ func redirectIfAuthenticated(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+func loginLimitKey(r *http.Request, email string) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(host) + "|" + strings.ToLower(strings.TrimSpace(email))))
+	return hex.EncodeToString(sum[:])
 }
 
 func safeNextPath(raw, fallback string) string {

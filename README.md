@@ -8,8 +8,8 @@ The project is a Go application with a server-rendered HTML interface, a
 versioned JSON API, and PostgreSQL persistence. The implementation plan lives
 in [docs/plans/20261108_201136_budget_tracker_mvp_plan.md](docs/plans/20261108_201136_budget_tracker_mvp_plan.md).
 
-**Status:** Milestone 3 (exchange rates and summaries) is complete. The next
-milestone adds invitations, preferences, and UX polish.
+**Status:** Milestone 4 (invitations, preferences, and UX polish) is complete.
+The final milestone covers hardening, smoke coverage, and documentation.
 
 ## Requirements
 
@@ -127,6 +127,8 @@ Current HTML routes:
 /app/spendings/{id}/edit       edit spending
 /app/exchange-rates            manage exact and monthly rates
 /app/reports                   converted household summary
+/app/preferences               personal currency overrides
+/invitations/{token}           public invitation acceptance
 ```
 
 Current JSON endpoints (cookie authentication, CSRF header on unsafe methods):
@@ -137,6 +139,12 @@ POST /api/v1/households
 GET  /api/v1/households/{id}
 GET  /api/v1/households/{id}/members   admin only
 GET  /api/v1/households/{id}/options   members
+PUT  /api/v1/households/{id}/options   admin only
+GET  /api/v1/households/{id}/my-options
+PUT  /api/v1/households/{id}/my-options
+GET  /api/v1/households/{id}/invitations   admin only
+POST /api/v1/households/{id}/invitations   admin only
+DELETE /api/v1/households/{id}/invitations/{invitation_id}
 GET  /api/v1/currencies
 GET  /api/v1/incomes
 POST /api/v1/incomes
@@ -158,6 +166,18 @@ GET  /api/v1/reports/summary?from=&to=&currency=&scope=&household_id=
 Entry lists accept `scope=mine|all`, `from`, `to`, `page`, and `page_size`.
 Members can only use `mine`; admins can view the whole household with `all`.
 Household-wide entries are admin-only to create, view, edit, and delete.
+
+## Invitations and preferences
+
+Admins invite members by email and role and receive a one-time invitation link
+to share manually; email delivery is not part of the MVP. Invitation tokens
+are hashed at rest, expire after seven days, are single-use, and require the
+accepting account's normalized email to match. Acceptance creates the
+membership and makes the household active.
+
+Household currency defaults are admin-managed. Each member can override
+income, spending, and display currencies for a household or inherit the
+defaults. Entry forms and reports use the resolved effective values.
 
 ## Income and spending
 

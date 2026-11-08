@@ -74,7 +74,7 @@
               <p class="font-medium text-stone-900">{{.Email}}</p>
               <p class="text-sm text-stone-500">{{.Role}} &middot; expires {{.ExpiresAt.Format "2 January 2006"}}</p>
             </div>
-            <form method="post" action="/app/households/{{$.Household.ID}}/invitations/{{.ID}}/delete" onsubmit="return confirm('Revoke this invitation?');">
+            <form method="post" action="/app/households/{{$.Household.ID}}/invitations/{{.ID}}/delete" data-confirm="Revoke this invitation?">
               <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
               <button type="submit" class="text-sm font-semibold text-rose-700 hover:text-rose-900">Revoke</button>
             </form>
