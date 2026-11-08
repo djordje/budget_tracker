@@ -96,6 +96,12 @@ func noticeFromQuery(r *http.Request) string {
 		return "Household created."
 	case "household_saved":
 		return "Household settings saved."
+	case "entry_created":
+		return "Entry added."
+	case "entry_updated":
+		return "Entry updated."
+	case "entry_deleted":
+		return "Entry deleted."
 	default:
 		return ""
 	}

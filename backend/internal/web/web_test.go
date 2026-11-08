@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 )
 
@@ -70,12 +71,30 @@ func (s stubHouseholds) GetOptions(context.Context, uuid.UUID, uuid.UUID) (house
 	return households.Options{}, s.err
 }
 
+type stubEntries struct{}
+
+func (stubEntries) Currencies(context.Context) ([]finance.Currency, error) { return nil, nil }
+func (stubEntries) Create(context.Context, finance.CreateParams) (finance.Entry, error) {
+	return finance.Entry{}, nil
+}
+func (stubEntries) Get(context.Context, uuid.UUID, finance.Kind, int64) (finance.Entry, error) {
+	return finance.Entry{}, nil
+}
+func (stubEntries) Update(context.Context, finance.UpdateParams) (finance.Entry, error) {
+	return finance.Entry{}, nil
+}
+func (stubEntries) Delete(context.Context, uuid.UUID, finance.Kind, int64) error { return nil }
+func (stubEntries) List(context.Context, finance.ListParams) (finance.ListResult, error) {
+	return finance.ListResult{}, nil
+}
+
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	handler, err := New(Deps{
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
+		Entries:    stubEntries{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -219,6 +238,7 @@ func TestStaticRejectsDotfilesAndDirectories(t *testing.T) {
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
+		Entries:    stubEntries{},
 		StaticDir:  staticDir,
 	})
 	if err != nil {
@@ -262,6 +282,7 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
+		Entries:    stubEntries{},
 		StaticDir:  staticDir,
 	})
 	if err != nil {
@@ -291,6 +312,7 @@ func TestNewRejectsMissingStaticDirectory(t *testing.T) {
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
+		Entries:    stubEntries{},
 		StaticDir:  missing,
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
@@ -301,6 +323,7 @@ func TestNewRequiresSessionService(t *testing.T) {
 	if _, err := New(Deps{
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Households: stubHouseholds{},
+		Entries:    stubEntries{},
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
@@ -310,6 +333,17 @@ func TestNewRequiresHouseholdService(t *testing.T) {
 	if _, err := New(Deps{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
+		Entries:  stubEntries{},
+	}); err == nil {
+		t.Fatal("New() error = nil, want error")
+	}
+}
+
+func TestNewRequiresEntryService(t *testing.T) {
+	if _, err := New(Deps{
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}

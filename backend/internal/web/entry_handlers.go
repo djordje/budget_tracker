@@ -1,0 +1,615 @@
+package web
+
+import (
+	"errors"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
+	"budgettracker/internal/households"
+)
+
+const entryDateLayout = "2006-01-02"
+
+var errNoActiveHousehold = errors.New("no active household")
+
+type entryListPageData struct {
+	pageData
+	Kind        string
+	KindLabel   string
+	Entries     []entryRow
+	ScopeAll    bool
+	IsAdmin     bool
+	From        string
+	To          string
+	Page        int
+	Total       int
+	TotalPages  int
+	IncomeURL   string
+	SpendingURL string
+	NewURL      string
+	ClearURL    string
+	PreviousURL string
+	NextURL     string
+}
+
+type entryRow struct {
+	Entry       finance.Entry
+	KindLabel   string
+	IsIncome    bool
+	Attribution string
+	EditURL     string
+	DeleteURL   string
+	CanModify   bool
+}
+
+type entryFormPageData struct {
+	pageData
+	KindLabel             string
+	Action                string
+	CancelURL             string
+	IsEdit                bool
+	Amount                string
+	CurrencyCode          string
+	EntryDate             string
+	Description           string
+	HouseholdWide         bool
+	Currencies            []finance.Currency
+	IsAdmin               bool
+	ShowAttributionChoice bool
+	FieldErrors           map[string]string
+	FormError             string
+}
+
+type entryFormValues struct {
+	Amount        string
+	CurrencyCode  string
+	EntryDate     string
+	Description   string
+	HouseholdWide bool
+}
+
+// Entries lists the active household's entries.
+func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
+	data, ok := h.pageDataOrError(w, r, "Entries")
+	if !ok {
+		return
+	}
+	if data.ActiveHousehold == nil {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+
+	query := r.URL.Query()
+	kind := finance.KindSpending
+	switch query.Get("type") {
+	case "income":
+		kind = finance.KindIncome
+	case "", "spending":
+	default:
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Choose income or spending entries.")
+		return
+	}
+
+	scope, err := finance.ParseScope(query.Get("scope"))
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Choose my entries or the whole household.")
+		return
+	}
+	if !data.ActiveHousehold.IsAdmin() {
+		scope = finance.ScopeMine
+	}
+
+	from, err := parseOptionalDate(query.Get("from"))
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the start date.")
+		return
+	}
+	to, err := parseOptionalDate(query.Get("to"))
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the end date.")
+		return
+	}
+	page, err := parsePage(query.Get("page"))
+	if err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Page must be a positive number.")
+		return
+	}
+
+	result, err := h.entries.List(r.Context(), finance.ListParams{
+		Kind:        kind,
+		HouseholdID: data.ActiveHousehold.ID,
+		ActorID:     data.User.ID,
+		Scope:       scope,
+		From:        from,
+		To:          to,
+		Page:        page,
+		PageSize:    20,
+	})
+	if err != nil {
+		h.renderEntryError(w, r, err)
+		return
+	}
+
+	rows := make([]entryRow, 0, len(result.Entries))
+	for _, entry := range result.Entries {
+		rows = append(rows, h.toEntryRow(entry, data.User.ID, data.ActiveHousehold.IsAdmin()))
+	}
+
+	fromValue, toValue := "", ""
+	if from != nil {
+		fromValue = from.Format(entryDateLayout)
+	}
+	if to != nil {
+		toValue = to.Format(entryDateLayout)
+	}
+	baseURL := func(kind finance.Kind, page int) string {
+		return entryListURL(kind, scope, fromValue, toValue, page)
+	}
+
+	pageData := entryListPageData{
+		pageData:    data,
+		KindLabel:   kindLabel(kind),
+		Entries:     rows,
+		ScopeAll:    scope == finance.ScopeAll,
+		IsAdmin:     data.ActiveHousehold.IsAdmin(),
+		From:        fromValue,
+		To:          toValue,
+		Page:        result.Page,
+		Total:       result.Total,
+		TotalPages:  result.TotalPages,
+		IncomeURL:   baseURL(finance.KindIncome, 1),
+		SpendingURL: baseURL(finance.KindSpending, 1),
+		NewURL:      "/app/" + kindPlural(kind) + "/new",
+		ClearURL:    "/app/entries?type=" + string(kind),
+	}
+	if result.Page > 1 {
+		pageData.PreviousURL = baseURL(kind, result.Page-1)
+	}
+	if result.Page < result.TotalPages {
+		pageData.NextURL = baseURL(kind, result.Page+1)
+	}
+	h.render(w, r, "entries", http.StatusOK, pageData)
+}
+
+// NewIncomePage serves the income creation form.
+func (h *Handler) NewIncomePage(w http.ResponseWriter, r *http.Request) {
+	h.newEntry(w, r, finance.KindIncome)
+}
+
+// NewSpendingPage serves the spending creation form.
+func (h *Handler) NewSpendingPage(w http.ResponseWriter, r *http.Request) {
+	h.newEntry(w, r, finance.KindSpending)
+}
+
+func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
+	data, err := h.entryFormBase(r, kind, false)
+	if errors.Is(err, errNoActiveHousehold) {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	options, err := h.households.GetOptions(r.Context(), session.User.ID, data.ActiveHousehold.ID)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	data.Amount = ""
+	data.CurrencyCode = defaultCurrency(options, kind)
+	data.EntryDate = time.Now().Format(entryDateLayout)
+	data.Description = ""
+	data.HouseholdWide = false
+	data.ShowAttributionChoice = data.IsAdmin
+	h.render(w, r, "entry_form", http.StatusOK, data)
+}
+
+// CreateIncome creates an income from the HTML form.
+func (h *Handler) CreateIncome(w http.ResponseWriter, r *http.Request) {
+	h.createEntry(w, r, finance.KindIncome)
+}
+
+// CreateSpending creates a spending from the HTML form.
+func (h *Handler) CreateSpending(w http.ResponseWriter, r *http.Request) {
+	h.createEntry(w, r, finance.KindSpending)
+}
+
+func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	data, err := h.entryFormBase(r, kind, false)
+	if errors.Is(err, errNoActiveHousehold) {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	values := entryFormValuesFromRequest(r)
+	data = applyEntryFormValues(data, values)
+	data.ShowAttributionChoice = data.IsAdmin
+
+	entryDate, dateErr := parseFormDate(values.EntryDate)
+	if dateErr != nil {
+		data.FieldErrors = map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."}
+		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+		return
+	}
+
+	_, err = h.entries.Create(r.Context(), finance.CreateParams{
+		Kind:          kind,
+		HouseholdID:   data.ActiveHousehold.ID,
+		ActorID:       session.User.ID,
+		Amount:        values.Amount,
+		CurrencyCode:  values.CurrencyCode,
+		EntryDate:     entryDate,
+		Description:   values.Description,
+		HouseholdWide: values.HouseholdWide,
+	})
+	if err != nil {
+		h.renderEntryFormError(w, r, data, err)
+		return
+	}
+
+	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_created", http.StatusSeeOther)
+}
+
+// EditIncomePage serves the income edit form.
+func (h *Handler) EditIncomePage(w http.ResponseWriter, r *http.Request) {
+	h.editEntry(w, r, finance.KindIncome)
+}
+
+// EditSpendingPage serves the spending edit form.
+func (h *Handler) EditSpendingPage(w http.ResponseWriter, r *http.Request) {
+	h.editEntry(w, r, finance.KindSpending)
+}
+
+func (h *Handler) editEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	id, err := entryIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+		return
+	}
+	data, err := h.entryFormBase(r, kind, true)
+	if errors.Is(err, errNoActiveHousehold) {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+
+	entry, err := h.entries.Get(r.Context(), session.User.ID, kind, id)
+	if err != nil {
+		h.renderEntryError(w, r, err)
+		return
+	}
+	if entry.HouseholdID != data.ActiveHousehold.ID {
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+		return
+	}
+	policy := finance.NewEntryPolicy(session.User.ID, data.ActiveHousehold.IsAdmin())
+	if !policy.CanModify(entry) {
+		h.renderError(w, r, http.StatusForbidden, "Not allowed", "You cannot edit that entry.")
+		return
+	}
+	data.Action = "/app/" + kindPlural(kind) + "/" + strconv.FormatInt(id, 10)
+	data.IsEdit = true
+	data.Amount = entry.AmountString()
+	data.CurrencyCode = entry.CurrencyCode
+	data.EntryDate = entry.DateString()
+	if entry.Description != nil {
+		data.Description = *entry.Description
+	}
+	data.HouseholdWide = entry.IsHouseholdWide()
+	data.ShowAttributionChoice = false
+	h.render(w, r, "entry_form", http.StatusOK, data)
+}
+
+// UpdateIncome updates an income from the HTML form.
+func (h *Handler) UpdateIncome(w http.ResponseWriter, r *http.Request) {
+	h.updateEntry(w, r, finance.KindIncome)
+}
+
+// UpdateSpending updates a spending from the HTML form.
+func (h *Handler) UpdateSpending(w http.ResponseWriter, r *http.Request) {
+	h.updateEntry(w, r, finance.KindSpending)
+}
+
+func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	id, err := entryIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	data, err := h.entryFormBase(r, kind, true)
+	if errors.Is(err, errNoActiveHousehold) {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	entry, err := h.entries.Get(r.Context(), session.User.ID, kind, id)
+	if err != nil {
+		h.renderEntryError(w, r, err)
+		return
+	}
+	if entry.HouseholdID != data.ActiveHousehold.ID {
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+		return
+	}
+	values := entryFormValuesFromRequest(r)
+	data.Action = "/app/" + kindPlural(kind) + "/" + strconv.FormatInt(id, 10)
+	data.IsEdit = true
+	data = applyEntryFormValues(data, values)
+	data.HouseholdWide = entry.IsHouseholdWide()
+	data.ShowAttributionChoice = false
+
+	entryDate, dateErr := parseFormDate(values.EntryDate)
+	if dateErr != nil {
+		data.FieldErrors = map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."}
+		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+		return
+	}
+	amount := values.Amount
+	currencyCode := values.CurrencyCode
+	description := values.Description
+	_, err = h.entries.Update(r.Context(), finance.UpdateParams{
+		Kind:         kind,
+		ID:           id,
+		ActorID:      session.User.ID,
+		Amount:       &amount,
+		CurrencyCode: &currencyCode,
+		EntryDate:    &entryDate,
+		Description:  &description,
+	})
+	if err != nil {
+		h.renderEntryFormError(w, r, data, err)
+		return
+	}
+
+	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_updated", http.StatusSeeOther)
+}
+
+// DeleteIncome deletes an income from the HTML form.
+func (h *Handler) DeleteIncome(w http.ResponseWriter, r *http.Request) {
+	h.deleteEntry(w, r, finance.KindIncome)
+}
+
+// DeleteSpending deletes a spending from the HTML form.
+func (h *Handler) DeleteSpending(w http.ResponseWriter, r *http.Request) {
+	h.deleteEntry(w, r, finance.KindSpending)
+}
+
+func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	id, err := entryIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+		return
+	}
+	if err := h.entries.Delete(r.Context(), session.User.ID, kind, id); err != nil {
+		h.renderEntryError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/app/entries?type="+string(kind)+"&notice=entry_deleted", http.StatusSeeOther)
+}
+
+func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool) (entryFormPageData, error) {
+	title := "New " + strings.ToLower(kindLabel(kind))
+	if isEdit {
+		title = "Edit " + strings.ToLower(kindLabel(kind))
+	}
+	data, err := h.newPageData(r, title)
+	if err != nil {
+		return entryFormPageData{}, err
+	}
+	if data.ActiveHousehold == nil {
+		return entryFormPageData{}, errNoActiveHousehold
+	}
+	currencies, err := h.entries.Currencies(r.Context())
+	if err != nil {
+		return entryFormPageData{}, err
+	}
+	return entryFormPageData{
+		pageData:    data,
+		KindLabel:   kindLabel(kind),
+		Action:      "/app/" + kindPlural(kind),
+		CancelURL:   "/app/entries?type=" + string(kind),
+		Currencies:  currencies,
+		IsAdmin:     data.ActiveHousehold.IsAdmin(),
+		FieldErrors: make(map[string]string),
+	}, nil
+}
+
+func (h *Handler) renderEntryFormError(w http.ResponseWriter, r *http.Request, data entryFormPageData, err error) {
+	var validation *finance.ValidationError
+	switch {
+	case errors.As(err, &validation):
+		for field, message := range validation.Fields {
+			data.FieldErrors[field] = message
+		}
+		h.render(w, r, "entry_form", http.StatusUnprocessableEntity, data)
+	case errors.Is(err, finance.ErrForbidden):
+		data.FormError = "You do not have permission to save this entry."
+		h.render(w, r, "entry_form", http.StatusForbidden, data)
+	case errors.Is(err, finance.ErrNotFound):
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+	default:
+		h.internalError(w, r, err)
+	}
+}
+
+func (h *Handler) renderEntryError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, finance.ErrNotFound):
+		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
+	case errors.Is(err, finance.ErrForbidden):
+		h.renderError(w, r, http.StatusForbidden, "Not allowed", "You do not have permission to do that.")
+	default:
+		h.internalError(w, r, err)
+	}
+}
+
+func (h *Handler) toEntryRow(entry finance.Entry, actorID uuid.UUID, isAdmin bool) entryRow {
+	attribution := "You"
+	if entry.IsHouseholdWide() {
+		attribution = "Household"
+	} else if entry.UserID == nil || *entry.UserID != actorID {
+		attribution = strings.TrimSpace(entry.OwnerFirstName + " " + entry.OwnerLastName)
+		if attribution == "" {
+			attribution = "Member"
+		}
+	}
+	return entryRow{
+		Entry:       entry,
+		KindLabel:   kindLabel(entry.Kind),
+		IsIncome:    entry.Kind == finance.KindIncome,
+		Attribution: attribution,
+		EditURL:     "/app/" + kindPlural(entry.Kind) + "/" + strconv.FormatInt(entry.ID, 10) + "/edit",
+		DeleteURL:   "/app/" + kindPlural(entry.Kind) + "/" + strconv.FormatInt(entry.ID, 10) + "/delete",
+		CanModify:   finance.NewEntryPolicy(actorID, isAdmin).CanModify(entry),
+	}
+}
+
+func entryIDFromPath(r *http.Request) (int64, error) {
+	id, err := strconv.ParseInt(r.PathValue("entryID"), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("invalid entry ID")
+	}
+	return id, nil
+}
+
+func entryFormValuesFromRequest(r *http.Request) entryFormValues {
+	return entryFormValues{
+		Amount:        r.FormValue("amount"),
+		CurrencyCode:  r.FormValue("currency_code"),
+		EntryDate:     r.FormValue("entry_date"),
+		Description:   r.FormValue("description"),
+		HouseholdWide: r.FormValue("attribution") == "household",
+	}
+}
+
+func applyEntryFormValues(data entryFormPageData, values entryFormValues) entryFormPageData {
+	data.Amount = values.Amount
+	data.CurrencyCode = values.CurrencyCode
+	data.EntryDate = values.EntryDate
+	data.Description = values.Description
+	data.HouseholdWide = values.HouseholdWide
+	return data
+}
+
+func parseFormDate(raw string) (time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(entryDateLayout, value)
+}
+
+func parseOptionalDate(raw string) (*time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(entryDateLayout, value)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+func parsePage(raw string) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 1, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, errors.New("invalid page")
+	}
+	return value, nil
+}
+
+func entryListURL(kind finance.Kind, scope finance.Scope, from, to string, page int) string {
+	values := url.Values{}
+	values.Set("type", string(kind))
+	if scope == finance.ScopeAll {
+		values.Set("scope", "all")
+	}
+	if from != "" {
+		values.Set("from", from)
+	}
+	if to != "" {
+		values.Set("to", to)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	return "/app/entries?" + values.Encode()
+}
+
+func kindLabel(kind finance.Kind) string {
+	if kind == finance.KindIncome {
+		return "Income"
+	}
+	return "Spending"
+}
+
+func kindPlural(kind finance.Kind) string {
+	if kind == finance.KindIncome {
+		return "incomes"
+	}
+	return "spendings"
+}
+
+func defaultCurrency(options households.Options, kind finance.Kind) string {
+	if kind == finance.KindIncome {
+		return options.DefaultIncomeCurrencyCode
+	}
+	return options.DefaultSpendingCurrencyCode
+}

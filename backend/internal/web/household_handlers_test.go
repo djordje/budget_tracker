@@ -52,6 +52,7 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 				return household, nil
 			},
 		},
+		Entries: stubEntries{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -85,6 +86,7 @@ func TestCreateHouseholdRendersValidationErrors(t *testing.T) {
 				}
 			},
 		},
+		Entries: stubEntries{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -115,6 +117,7 @@ func TestCreateHouseholdRendersActivationFailure(t *testing.T) {
 				return households.Household{}, auth.ErrSessionNotFound
 			},
 		},
+		Entries: stubEntries{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

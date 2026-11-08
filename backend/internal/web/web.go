@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 	site "budgettracker/web"
 )
@@ -26,6 +27,16 @@ type SessionService interface {
 	Login(ctx context.Context, email, password string) (auth.Session, error)
 	DeleteSession(ctx context.Context, rawToken string) error
 	SetActiveHousehold(ctx context.Context, tokenHash string, userID uuid.UUID, householdID *uuid.UUID) error
+}
+
+// EntryService is the finance behavior needed by HTML handlers.
+type EntryService interface {
+	Currencies(ctx context.Context) ([]finance.Currency, error)
+	Create(ctx context.Context, params finance.CreateParams) (finance.Entry, error)
+	Get(ctx context.Context, actorID uuid.UUID, kind finance.Kind, id int64) (finance.Entry, error)
+	Update(ctx context.Context, params finance.UpdateParams) (finance.Entry, error)
+	Delete(ctx context.Context, actorID uuid.UUID, kind finance.Kind, id int64) error
+	List(ctx context.Context, params finance.ListParams) (finance.ListResult, error)
 }
 
 // HouseholdService is the household behavior needed by HTML handlers.
@@ -42,6 +53,7 @@ type Deps struct {
 	Logger     *slog.Logger
 	Sessions   SessionService
 	Households HouseholdService
+	Entries    EntryService
 	Cookies    auth.CookieConfig
 	StaticDir  string
 }
@@ -55,6 +67,7 @@ type Handler struct {
 	year       int
 	sessions   SessionService
 	households HouseholdService
+	entries    EntryService
 	cookies    auth.CookieConfig
 }
 
@@ -70,6 +83,9 @@ func New(deps Deps) (*Handler, error) {
 	}
 	if deps.Households == nil {
 		return nil, fmt.Errorf("household service is required")
+	}
+	if deps.Entries == nil {
+		return nil, fmt.Errorf("entry service is required")
 	}
 
 	pages, err := parsePages(site.Templates)
@@ -102,6 +118,7 @@ func New(deps Deps) (*Handler, error) {
 		year:       time.Now().Year(),
 		sessions:   deps.Sessions,
 		households: deps.Households,
+		entries:    deps.Entries,
 		cookies:    deps.Cookies,
 	}, nil
 }

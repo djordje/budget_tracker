@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 	"budgettracker/internal/httpapi"
 	"budgettracker/internal/web"
@@ -29,6 +30,7 @@ func New(deps Deps) (http.Handler, error) {
 
 	authService := auth.NewService(deps.DB)
 	householdService := households.NewService(deps.DB)
+	financeService := finance.NewService(deps.DB)
 	cookies := auth.CookieConfig{Secure: deps.SecureCookies}
 	csrf := httpapi.NewCSRF(httpapi.CSRFConfig{Secure: deps.SecureCookies})
 	sessions := auth.NewMiddleware(authService, cookies, deps.Logger)
@@ -37,6 +39,7 @@ func New(deps Deps) (http.Handler, error) {
 		Logger:     deps.Logger,
 		Sessions:   authService,
 		Households: householdService,
+		Entries:    financeService,
 		Cookies:    cookies,
 		StaticDir:  deps.StaticDir,
 	})
@@ -45,6 +48,7 @@ func New(deps Deps) (http.Handler, error) {
 	}
 	health := httpapi.NewHealth(deps.DB, deps.Logger)
 	householdAPI := httpapi.NewHouseholdHandler(householdService, deps.Logger)
+	entryAPI := httpapi.NewEntryHandler(financeService, deps.Logger)
 
 	protected := http.NewServeMux()
 	protected.Handle("GET /{$}", http.HandlerFunc(webHandler.Home))
@@ -59,11 +63,33 @@ func New(deps Deps) (http.Handler, error) {
 	protected.Handle("GET /app/households/{householdID}/settings", web.RequireAuth(webHandler.HouseholdSettings))
 	protected.Handle("POST /app/households/{householdID}/settings", web.RequireAuth(webHandler.UpdateHousehold))
 	protected.Handle("POST /app/active-household", web.RequireAuth(webHandler.ActivateHousehold))
+	protected.Handle("GET /app/entries", web.RequireAuth(webHandler.Entries))
+	protected.Handle("GET /app/incomes/new", web.RequireAuth(webHandler.NewIncomePage))
+	protected.Handle("POST /app/incomes", web.RequireAuth(webHandler.CreateIncome))
+	protected.Handle("GET /app/incomes/{entryID}/edit", web.RequireAuth(webHandler.EditIncomePage))
+	protected.Handle("POST /app/incomes/{entryID}", web.RequireAuth(webHandler.UpdateIncome))
+	protected.Handle("POST /app/incomes/{entryID}/delete", web.RequireAuth(webHandler.DeleteIncome))
+	protected.Handle("GET /app/spendings/new", web.RequireAuth(webHandler.NewSpendingPage))
+	protected.Handle("POST /app/spendings", web.RequireAuth(webHandler.CreateSpending))
+	protected.Handle("GET /app/spendings/{entryID}/edit", web.RequireAuth(webHandler.EditSpendingPage))
+	protected.Handle("POST /app/spendings/{entryID}", web.RequireAuth(webHandler.UpdateSpending))
+	protected.Handle("POST /app/spendings/{entryID}/delete", web.RequireAuth(webHandler.DeleteSpending))
 	protected.Handle("GET /api/v1/households", httpapi.RequireAuthAPI(householdAPI.List))
 	protected.Handle("POST /api/v1/households", httpapi.RequireAuthAPI(householdAPI.Create))
 	protected.Handle("GET /api/v1/households/{householdID}", httpapi.RequireAuthAPI(householdAPI.Get))
 	protected.Handle("GET /api/v1/households/{householdID}/members", httpapi.RequireAuthAPI(householdAPI.Members))
 	protected.Handle("GET /api/v1/households/{householdID}/options", httpapi.RequireAuthAPI(householdAPI.Options))
+	protected.Handle("GET /api/v1/currencies", httpapi.RequireAuthAPI(entryAPI.Currencies))
+	protected.Handle("GET /api/v1/incomes", httpapi.RequireAuthAPI(entryAPI.ListIncome))
+	protected.Handle("POST /api/v1/incomes", httpapi.RequireAuthAPI(entryAPI.CreateIncome))
+	protected.Handle("GET /api/v1/incomes/{entryID}", httpapi.RequireAuthAPI(entryAPI.GetIncome))
+	protected.Handle("PATCH /api/v1/incomes/{entryID}", httpapi.RequireAuthAPI(entryAPI.UpdateIncome))
+	protected.Handle("DELETE /api/v1/incomes/{entryID}", httpapi.RequireAuthAPI(entryAPI.DeleteIncome))
+	protected.Handle("GET /api/v1/spendings", httpapi.RequireAuthAPI(entryAPI.ListSpending))
+	protected.Handle("POST /api/v1/spendings", httpapi.RequireAuthAPI(entryAPI.CreateSpending))
+	protected.Handle("GET /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.GetSpending))
+	protected.Handle("PATCH /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.UpdateSpending))
+	protected.Handle("DELETE /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.DeleteSpending))
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))
