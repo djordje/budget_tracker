@@ -51,10 +51,14 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
+			path := r.URL.Path
+			if strings.HasPrefix(path, "/invitations/") {
+				path = "/invitations/[redacted]"
+			}
 			logger.Info("http request",
 				"request_id", RequestIDFromContext(r.Context()),
 				"method", r.Method,
-				"path", r.URL.Path,
+				"path", path,
 				"status", status,
 				"bytes", recorder.bytes,
 				"duration_ms", time.Since(start).Milliseconds(),

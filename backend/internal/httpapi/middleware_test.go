@@ -128,3 +128,18 @@ func TestRecovererAfterCommitAppendsNothing(t *testing.T) {
 		t.Errorf("log output missing panic message: %s", output.String())
 	}
 }
+
+func TestRequestLoggerRedactsInvitationToken(t *testing.T) {
+	var output strings.Builder
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	handler := RequestID(RequestLogger(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/invitations/secret-token", nil))
+
+	if strings.Contains(output.String(), "secret-token") {
+		t.Fatalf("invitation token was logged: %s", output.String())
+	}
+	if !strings.Contains(output.String(), "/invitations/[redacted]") {
+		t.Errorf("redacted path missing: %s", output.String())
+	}
+}
