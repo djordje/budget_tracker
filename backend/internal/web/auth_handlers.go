@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"budgettracker/internal/auth"
@@ -11,6 +12,7 @@ import (
 type loginPageData struct {
 	pageData
 	Email     string
+	Next      string
 	FormError string
 }
 
@@ -19,6 +21,7 @@ type registerPageData struct {
 	FirstName   string
 	LastName    string
 	Email       string
+	Next        string
 	FieldErrors map[string]string
 }
 
@@ -36,7 +39,10 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	if redirectIfAuthenticated(w, r) {
 		return
 	}
-	h.render(w, r, "login", http.StatusOK, loginPageData{pageData: h.basePageData(r, "Sign in")})
+	h.render(w, r, "login", http.StatusOK, loginPageData{
+		pageData: h.basePageData(r, "Sign in"),
+		Next:     safeNextPath(r.URL.Query().Get("next"), ""),
+	})
 }
 
 // Login processes a sign-in form.
@@ -58,6 +64,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			h.render(w, r, "login", http.StatusUnprocessableEntity, loginPageData{
 				pageData:  h.basePageData(r, "Sign in"),
 				Email:     email,
+				Next:      safeNextPath(r.FormValue("next"), ""),
 				FormError: "Email or password is incorrect.",
 			})
 			return
@@ -67,7 +74,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.cookies.Set(w, session.Token, session.ExpiresAt)
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
+	http.Redirect(w, r, safeNextPath(r.FormValue("next"), "/app"), http.StatusSeeOther)
 }
 
 // RegisterPage serves the account registration form.
@@ -75,7 +82,10 @@ func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	if redirectIfAuthenticated(w, r) {
 		return
 	}
-	h.render(w, r, "register", http.StatusOK, registerPageData{pageData: h.basePageData(r, "Create account")})
+	h.render(w, r, "register", http.StatusOK, registerPageData{
+		pageData: h.basePageData(r, "Create account"),
+		Next:     safeNextPath(r.URL.Query().Get("next"), ""),
+	})
 }
 
 // Register processes an account registration form.
@@ -119,6 +129,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 				FirstName:   params.FirstName,
 				LastName:    params.LastName,
 				Email:       params.Email,
+				Next:        safeNextPath(r.FormValue("next"), ""),
 				FieldErrors: fieldErrors,
 			})
 		case errors.Is(err, auth.ErrEmailTaken):
@@ -128,6 +139,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 				FirstName:   params.FirstName,
 				LastName:    params.LastName,
 				Email:       params.Email,
+				Next:        safeNextPath(r.FormValue("next"), ""),
 				FieldErrors: fieldErrors,
 			})
 		default:
@@ -137,7 +149,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.cookies.Set(w, session.Token, session.ExpiresAt)
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
+	http.Redirect(w, r, safeNextPath(r.FormValue("next"), "/app"), http.StatusSeeOther)
 }
 
 // Dashboard serves the authenticated application home.
@@ -177,8 +189,20 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func redirectIfAuthenticated(w http.ResponseWriter, r *http.Request) bool {
 	if _, ok := auth.FromContext(r.Context()); ok {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		http.Redirect(w, r, safeNextPath(r.URL.Query().Get("next"), "/app"), http.StatusSeeOther)
 		return true
 	}
 	return false
+}
+
+func safeNextPath(raw, fallback string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+		return fallback
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.Path == "" {
+		return fallback
+	}
+	return parsed.RequestURI()
 }

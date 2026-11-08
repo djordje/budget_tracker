@@ -16,11 +16,15 @@ import (
 )
 
 type stubHouseholdService struct {
+	HouseholdService
 	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
 	list              func(context.Context, uuid.UUID) ([]households.Household, error)
 	get               func(context.Context, uuid.UUID, uuid.UUID) (households.Household, error)
 	members           func(context.Context, uuid.UUID, uuid.UUID) ([]households.Member, error)
 	getOptions        func(context.Context, uuid.UUID, uuid.UUID) (households.Options, error)
+	getOptionsView    func(context.Context, uuid.UUID, uuid.UUID) (households.OptionsView, error)
+	setUserOptions    func(context.Context, uuid.UUID, uuid.UUID, households.UpdateUserOptionsParams) (households.OptionsView, error)
+	revokeInvitation  func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 }
 
 func (s stubHouseholdService) CreateAndActivate(
@@ -43,6 +47,22 @@ func (s stubHouseholdService) Members(ctx context.Context, userID, householdID u
 
 func (s stubHouseholdService) GetOptions(ctx context.Context, userID, householdID uuid.UUID) (households.Options, error) {
 	return s.getOptions(ctx, userID, householdID)
+}
+
+func (s stubHouseholdService) GetOptionsView(ctx context.Context, userID, householdID uuid.UUID) (households.OptionsView, error) {
+	return s.getOptionsView(ctx, userID, householdID)
+}
+
+func (s stubHouseholdService) SetUserOptions(
+	ctx context.Context, userID, householdID uuid.UUID, params households.UpdateUserOptionsParams,
+) (households.OptionsView, error) {
+	return s.setUserOptions(ctx, userID, householdID, params)
+}
+
+func (s stubHouseholdService) RevokeInvitation(
+	ctx context.Context, actorID, householdID, invitationID uuid.UUID,
+) error {
+	return s.revokeInvitation(ctx, actorID, householdID, invitationID)
 }
 
 type stubSessionLookup struct {

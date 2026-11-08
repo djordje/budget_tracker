@@ -20,6 +20,12 @@ type HouseholdService interface {
 	Get(ctx context.Context, userID, householdID uuid.UUID) (households.Household, error)
 	Members(ctx context.Context, userID, householdID uuid.UUID) ([]households.Member, error)
 	GetOptions(ctx context.Context, userID, householdID uuid.UUID) (households.Options, error)
+	GetOptionsView(ctx context.Context, userID, householdID uuid.UUID) (households.OptionsView, error)
+	UpdateOptions(ctx context.Context, actorID, householdID uuid.UUID, params households.UpdateOptionsParams) (households.Options, error)
+	SetUserOptions(ctx context.Context, userID, householdID uuid.UUID, params households.UpdateUserOptionsParams) (households.OptionsView, error)
+	CreateInvitation(ctx context.Context, params households.CreateInvitationParams) (households.Invitation, string, error)
+	ListInvitations(ctx context.Context, actorID, householdID uuid.UUID) ([]households.Invitation, error)
+	RevokeInvitation(ctx context.Context, actorID, householdID, invitationID uuid.UUID) error
 }
 
 // HouseholdHandler serves the household JSON endpoints.
@@ -165,15 +171,24 @@ func (h *HouseholdHandler) Options(w http.ResponseWriter, r *http.Request) {
 
 func (h *HouseholdHandler) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	var validation *households.ValidationError
+	var optionsValidation *households.OptionsValidationError
 	switch {
 	case errors.As(err, &validation):
 		WriteValidationError(w, map[string]string{validation.Field: validation.Message})
-	case errors.Is(err, households.ErrNotFound):
-		WriteError(w, http.StatusNotFound, "not_found", "Household not found.")
+	case errors.As(err, &optionsValidation):
+		WriteValidationError(w, optionsValidation.Fields)
+	case errors.Is(err, households.ErrNotFound), errors.Is(err, households.ErrInvitationNotFound):
+		WriteError(w, http.StatusNotFound, "not_found", "Household or invitation not found.")
 	case errors.Is(err, auth.ErrSessionNotFound):
 		WriteError(w, http.StatusUnauthorized, "unauthenticated", "Sign in again to continue.")
 	case errors.Is(err, households.ErrForbidden):
 		WriteError(w, http.StatusForbidden, "forbidden", "You do not have permission to do that.")
+	case errors.Is(err, households.ErrInvitationExists):
+		WriteError(w, http.StatusConflict, "invitation_exists", "A pending invitation already exists for that email.")
+	case errors.Is(err, households.ErrAlreadyMember):
+		WriteError(w, http.StatusConflict, "already_member", "That email already belongs to the household.")
+	case errors.Is(err, households.ErrInvitationAccepted), errors.Is(err, households.ErrInvitationExpired):
+		WriteError(w, http.StatusConflict, "invitation_unavailable", "That invitation is no longer available.")
 	default:
 		h.logger.Error("household request failed", "path", r.URL.Path, "error", err)
 		WriteError(w, http.StatusInternalServerError, "internal_error", "The request could not be processed.")

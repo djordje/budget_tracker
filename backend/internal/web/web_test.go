@@ -42,6 +42,7 @@ func (s stubSessions) SetActiveHousehold(context.Context, string, uuid.UUID, *uu
 }
 
 type stubHouseholds struct {
+	HouseholdService
 	households        []households.Household
 	err               error
 	getOptionsErr     error
@@ -74,6 +75,41 @@ func (s stubHouseholds) GetOptions(context.Context, uuid.UUID, uuid.UUID) (house
 		return households.Options{}, s.getOptionsErr
 	}
 	return households.Options{}, s.err
+}
+
+func (s stubHouseholds) GetOptionsView(context.Context, uuid.UUID, uuid.UUID) (households.OptionsView, error) {
+	if s.getOptionsErr != nil {
+		return households.OptionsView{}, s.getOptionsErr
+	}
+	return households.OptionsView{}, s.err
+}
+
+func (s stubHouseholds) SetUserOptions(context.Context, uuid.UUID, uuid.UUID, households.UpdateUserOptionsParams) (households.OptionsView, error) {
+	return households.OptionsView{}, s.err
+}
+
+func (s stubHouseholds) RevokeInvitation(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error {
+	return s.err
+}
+
+func (s stubHouseholds) UpdateOptions(context.Context, uuid.UUID, uuid.UUID, households.UpdateOptionsParams) (households.Options, error) {
+	return households.Options{}, s.err
+}
+
+func (s stubHouseholds) CreateInvitation(context.Context, households.CreateInvitationParams) (households.Invitation, string, error) {
+	return households.Invitation{}, "", s.err
+}
+
+func (s stubHouseholds) ListInvitations(context.Context, uuid.UUID, uuid.UUID) ([]households.Invitation, error) {
+	return nil, s.err
+}
+
+func (s stubHouseholds) InvitationByToken(context.Context, string) (households.Invitation, error) {
+	return households.Invitation{}, s.err
+}
+
+func (s stubHouseholds) AcceptInvitation(context.Context, string, uuid.UUID) (households.Invitation, error) {
+	return households.Invitation{}, s.err
 }
 
 type stubEntries struct{}
@@ -408,5 +444,40 @@ func TestNewRequiresRateAndReportServices(t *testing.T) {
 func TestParsePagesRequiresPages(t *testing.T) {
 	if _, err := parsePages(fstest.MapFS{}); err == nil {
 		t.Fatal("parsePages() error = nil, want error")
+	}
+}
+
+func TestSafeNextPath(t *testing.T) {
+	tests := []struct {
+		raw      string
+		fallback string
+		want     string
+	}{
+		{raw: "/invitations/token", fallback: "/app", want: "/invitations/token"},
+		{raw: "/app?notice=invitation_accepted", fallback: "/app", want: "/app?notice=invitation_accepted"},
+		{raw: "", fallback: "/app", want: "/app"},
+		{raw: "//evil.example/path", fallback: "/app", want: "/app"},
+		{raw: "https://evil.example/path", fallback: "/app", want: "/app"},
+		{raw: "javascript:alert(1)", fallback: "/app", want: "/app"},
+		{raw: "invitations/token", fallback: "/app", want: "/app"},
+	}
+	for _, tt := range tests {
+		if got := safeNextPath(tt.raw, tt.fallback); got != tt.want {
+			t.Errorf("safeNextPath(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
+func TestLoginPagePreservesSafeNext(t *testing.T) {
+	handler := newTestHandler(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/login?next=%2Finvitations%2Ftoken", nil)
+	handler.LoginPage(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), `name="next" value="/invitations/token"`) {
+		t.Errorf("login page did not preserve safe next path:\n%s", recorder.Body.String())
 	}
 }

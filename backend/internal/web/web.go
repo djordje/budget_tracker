@@ -59,6 +59,14 @@ type HouseholdService interface {
 	Rename(ctx context.Context, userID, householdID uuid.UUID, name string) (households.Household, error)
 	Members(ctx context.Context, userID, householdID uuid.UUID) ([]households.Member, error)
 	GetOptions(ctx context.Context, userID, householdID uuid.UUID) (households.Options, error)
+	GetOptionsView(ctx context.Context, userID, householdID uuid.UUID) (households.OptionsView, error)
+	UpdateOptions(ctx context.Context, actorID, householdID uuid.UUID, params households.UpdateOptionsParams) (households.Options, error)
+	SetUserOptions(ctx context.Context, userID, householdID uuid.UUID, params households.UpdateUserOptionsParams) (households.OptionsView, error)
+	CreateInvitation(ctx context.Context, params households.CreateInvitationParams) (households.Invitation, string, error)
+	ListInvitations(ctx context.Context, actorID, householdID uuid.UUID) ([]households.Invitation, error)
+	RevokeInvitation(ctx context.Context, actorID, householdID, invitationID uuid.UUID) error
+	InvitationByToken(ctx context.Context, rawToken string) (households.Invitation, error)
+	AcceptInvitation(ctx context.Context, rawToken string, userID uuid.UUID) (households.Invitation, error)
 }
 
 // Deps contains the dependencies needed by the HTML application.

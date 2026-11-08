@@ -210,13 +210,13 @@ func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	options, err := h.households.GetOptions(r.Context(), session.User.ID, data.ActiveHousehold.ID)
+	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
 		h.internalError(w, r, err)
 		return
 	}
 	data.Amount = ""
-	data.CurrencyCode = defaultCurrency(options, kind)
+	data.CurrencyCode = defaultCurrency(view.Effective, kind)
 	data.EntryDate = time.Now().Format(entryDateLayout)
 	data.Description = ""
 	data.HouseholdWide = false
@@ -678,7 +678,7 @@ func kindPlural(kind finance.Kind) string {
 	return "spendings"
 }
 
-func defaultCurrency(options households.Options, kind finance.Kind) string {
+func defaultCurrency(options households.EffectiveOptions, kind finance.Kind) string {
 	if kind == finance.KindIncome {
 		return options.DefaultIncomeCurrencyCode
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 )
 
@@ -18,11 +19,18 @@ type newHouseholdPageData struct {
 
 type householdSettingsPageData struct {
 	pageData
-	Household   households.Household
-	Members     []households.Member
-	Options     households.Options
-	Name        string
-	FieldErrors map[string]string
+	Household          households.Household
+	Members            []households.Member
+	Options            households.Options
+	Currencies         []finance.Currency
+	Invitations        []households.Invitation
+	Name               string
+	FieldErrors        map[string]string
+	OptionsFieldErrors map[string]string
+	InviteEmail        string
+	InviteRole         string
+	InviteFieldErrors  map[string]string
+	NewInvitationLink  string
 }
 
 // NewHouseholdPage serves the household creation form.
@@ -160,6 +168,129 @@ func (h *Handler) ActivateHousehold(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/app", http.StatusSeeOther)
 }
 
+// UpdateHouseholdOptions updates household currency defaults.
+func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request) {
+	householdID, ok := householdIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+	params := households.UpdateOptionsParams{
+		DefaultIncomeCurrencyCode:   r.FormValue("default_income_currency_code"),
+		DefaultSpendingCurrencyCode: r.FormValue("default_spending_currency_code"),
+		DefaultDisplayCurrencyCode:  r.FormValue("default_display_currency_code"),
+	}
+	if _, err := h.households.UpdateOptions(r.Context(), session.User.ID, householdID, params); err != nil {
+		var validation *households.OptionsValidationError
+		if errors.As(err, &validation) {
+			data, dataErr := h.settingsData(r, householdID)
+			if dataErr != nil {
+				h.renderSettingsError(w, r, dataErr)
+				return
+			}
+			data.OptionsFieldErrors = validation.Fields
+			h.render(w, r, "household_settings", http.StatusUnprocessableEntity, data)
+			return
+		}
+		h.renderSettingsError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/app/households/"+householdID.String()+"/settings?notice=options_saved", http.StatusSeeOther)
+}
+
+// CreateHouseholdInvitation creates a shareable invitation link.
+func (h *Handler) CreateHouseholdInvitation(w http.ResponseWriter, r *http.Request) {
+	householdID, ok := householdIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+	email := r.FormValue("email")
+	role := r.FormValue("role")
+	if role == "" {
+		role = string(households.RoleMember)
+	}
+	_, token, err := h.households.CreateInvitation(r.Context(), households.CreateInvitationParams{
+		HouseholdID: householdID,
+		ActorID:     session.User.ID,
+		Email:       email,
+		Role:        households.Role(role),
+	})
+	if err != nil {
+		data, dataErr := h.settingsData(r, householdID)
+		if dataErr != nil {
+			h.renderSettingsError(w, r, dataErr)
+			return
+		}
+		data.InviteEmail = email
+		data.InviteRole = role
+		var validation *households.ValidationError
+		switch {
+		case errors.As(err, &validation):
+			data.InviteFieldErrors = map[string]string{validation.Field: validation.Message}
+		case errors.Is(err, households.ErrInvitationExists):
+			data.InviteFieldErrors = map[string]string{"email": "A pending invitation already exists for this email."}
+		case errors.Is(err, households.ErrAlreadyMember):
+			data.InviteFieldErrors = map[string]string{"email": "That email already belongs to the household."}
+		default:
+			h.renderSettingsError(w, r, err)
+			return
+		}
+		h.render(w, r, "household_settings", http.StatusUnprocessableEntity, data)
+		return
+	}
+
+	data, err := h.settingsData(r, householdID)
+	if err != nil {
+		h.renderSettingsError(w, r, err)
+		return
+	}
+	data.NewInvitationLink = "/invitations/" + token
+	data.Notice = "Invitation created. Share the link with the invited person."
+	data.InviteEmail = ""
+	data.InviteRole = string(households.RoleMember)
+	h.render(w, r, "household_settings", http.StatusCreated, data)
+}
+
+// RevokeHouseholdInvitation removes a pending invitation.
+func (h *Handler) RevokeHouseholdInvitation(w http.ResponseWriter, r *http.Request) {
+	householdID, ok := householdIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	session, ok := auth.FromContext(r.Context())
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	invitationID, err := uuid.Parse(r.PathValue("invitationID"))
+	if err != nil {
+		h.renderSettingsError(w, r, households.ErrInvitationNotFound)
+		return
+	}
+	if err := h.households.RevokeInvitation(r.Context(), session.User.ID, householdID, invitationID); err != nil {
+		h.renderSettingsError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/app/households/"+householdID.String()+"/settings?notice=invitation_revoked", http.StatusSeeOther)
+}
+
 func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (householdSettingsPageData, error) {
 	data, err := h.newPageData(r, "Household settings")
 	if err != nil {
@@ -186,18 +317,33 @@ func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (househol
 	if err != nil {
 		return householdSettingsPageData{}, err
 	}
+	currencies, err := h.entries.Currencies(r.Context())
+	if err != nil {
+		return householdSettingsPageData{}, err
+	}
+	invitations, err := h.households.ListInvitations(r.Context(), session.User.ID, householdID)
+	if err != nil {
+		return householdSettingsPageData{}, err
+	}
 
 	return householdSettingsPageData{
-		pageData:  data,
-		Household: *household,
-		Members:   members,
-		Options:   options,
-		Name:      household.Name,
+		pageData:    data,
+		Household:   *household,
+		Members:     members,
+		Options:     options,
+		Currencies:  currencies,
+		Invitations: invitations,
+		Name:        household.Name,
+		InviteRole:  string(households.RoleMember),
 	}, nil
 }
 
 func (h *Handler) renderSettingsError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, households.ErrInvitationNotFound):
+		h.renderError(w, r, http.StatusNotFound, "Invitation not found", "That invitation is not available.")
+	case errors.Is(err, households.ErrInvitationAccepted):
+		h.renderError(w, r, http.StatusConflict, "Invitation already accepted", "That invitation is no longer pending.")
 	case errors.Is(err, households.ErrNotFound), errors.Is(err, auth.ErrSessionNotFound):
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 	case errors.Is(err, households.ErrForbidden):

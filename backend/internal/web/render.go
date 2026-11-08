@@ -109,6 +109,16 @@ func noticeFromQuery(r *http.Request) string {
 		return "Exchange rate updated."
 	case "rate_deleted":
 		return "Exchange rate deleted."
+	case "invitation_accepted":
+		return "You joined the household."
+	case "invitation_created":
+		return "Invitation created. Share the link with the invited person."
+	case "invitation_revoked":
+		return "Invitation revoked."
+	case "options_saved":
+		return "Household currency defaults saved."
+	case "preferences_saved":
+		return "Preferences saved."
 	default:
 		return ""
 	}

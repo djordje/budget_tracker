@@ -74,14 +74,14 @@ func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
-	options, err := h.households.GetOptions(r.Context(), session.User.ID, data.ActiveHousehold.ID)
+	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
 		h.renderReportError(w, r, err)
 		return
 	}
 	currency := query.Get("currency")
 	if currency == "" {
-		currency = options.DefaultDisplayCurrencyCode
+		currency = view.Effective.DefaultDisplayCurrencyCode
 	}
 
 	summary, err := h.reports.Summary(r.Context(), reporting.SummaryParams{
