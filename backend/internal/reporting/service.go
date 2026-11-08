@@ -122,7 +122,7 @@ func (s *Service) Summary(ctx context.Context, params SummaryParams) (Summary, e
 		_ = tx.Rollback(rollbackCtx)
 	}()
 
-	display, err := s.displayCurrency(ctx, tx, params.HouseholdID, params.DisplayCurrency)
+	display, err := s.displayCurrency(ctx, tx, params.HouseholdID, params.ActorID, params.DisplayCurrency)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -207,15 +207,17 @@ func (s *Service) Summary(ctx context.Context, params SummaryParams) (Summary, e
 func (s *Service) displayCurrency(
 	ctx context.Context,
 	db finance.Querier,
-	householdID uuid.UUID,
+	householdID, userID uuid.UUID,
 	raw string,
 ) (finance.Currency, error) {
 	code := strings.ToUpper(strings.TrimSpace(raw))
 	if code == "" {
 		err := db.QueryRow(ctx, `
-			SELECT default_display_currency_code
-			FROM household_options
-			WHERE household_id = $1`, householdID).Scan(&code)
+			SELECT COALESCE(u.default_display_currency_code, h.default_display_currency_code)
+			FROM household_options h
+			LEFT JOIN user_options u
+			  ON u.household_id = h.household_id AND u.user_id = $2
+			WHERE h.household_id = $1`, householdID, userID).Scan(&code)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return finance.Currency{}, finance.ErrNotFound
 		}

@@ -561,3 +561,47 @@ func TestDescriptionTextValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestUserCurrencyOverridesAffectEntryDefaults(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+	householdService := households.NewService(fixture.pool)
+
+	income := "USD"
+	spending := "EUR"
+	if _, err := householdService.SetUserOptions(ctx, fixture.member.User.ID, fixture.householdID, households.UpdateUserOptionsParams{
+		DefaultIncomeCurrencyCode:   &income,
+		DefaultSpendingCurrencyCode: &spending,
+	}); err != nil {
+		t.Fatalf("SetUserOptions() error = %v", err)
+	}
+
+	incomeEntry, err := fixture.service.Create(ctx, CreateParams{
+		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Amount: "5",
+	})
+	if err != nil {
+		t.Fatalf("member income Create() error = %v", err)
+	}
+	if incomeEntry.CurrencyCode != "USD" {
+		t.Errorf("member income default = %q, want USD", incomeEntry.CurrencyCode)
+	}
+	spendingEntry, err := fixture.service.Create(ctx, CreateParams{
+		Kind: KindSpending, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Amount: "5",
+	})
+	if err != nil {
+		t.Fatalf("member spending Create() error = %v", err)
+	}
+	if spendingEntry.CurrencyCode != "EUR" {
+		t.Errorf("member spending default = %q, want EUR", spendingEntry.CurrencyCode)
+	}
+
+	adminEntry, err := fixture.service.Create(ctx, CreateParams{
+		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, Amount: "5",
+	})
+	if err != nil {
+		t.Fatalf("admin income Create() error = %v", err)
+	}
+	if adminEntry.CurrencyCode != "RSD" {
+		t.Errorf("admin income default = %q, want household RSD", adminEntry.CurrencyCode)
+	}
+}

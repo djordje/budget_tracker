@@ -210,7 +210,7 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (Entry, error
 	validation := newValidationError()
 	currencyCode := strings.ToUpper(strings.TrimSpace(params.CurrencyCode))
 	if currencyCode == "" {
-		currencyCode, err = s.defaultCurrencyCode(ctx, params.HouseholdID, params.Kind)
+		currencyCode, err = s.defaultCurrencyCode(ctx, params.HouseholdID, params.ActorID, params.Kind)
 		if err != nil {
 			return Entry{}, err
 		}

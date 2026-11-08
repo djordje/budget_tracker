@@ -285,6 +285,20 @@ func TestSummaryDefaultsAndValidation(t *testing.T) {
 		t.Errorf("default summary = %+v", summary)
 	}
 
+	displayOverride := "USD"
+	if _, err := households.NewService(fixture.pool).SetUserOptions(ctx, fixture.admin.User.ID, fixture.householdID, households.UpdateUserOptionsParams{
+		DefaultDisplayCurrencyCode: &displayOverride,
+	}); err != nil {
+		t.Fatalf("set display override: %v", err)
+	}
+	summary, err = fixture.reporting.Summary(ctx, params)
+	if err != nil {
+		t.Fatalf("Summary() with override error = %v", err)
+	}
+	if summary.DisplayCurrency != "USD" {
+		t.Errorf("override display currency = %q, want USD", summary.DisplayCurrency)
+	}
+
 	params.DisplayCurrency = "XXX"
 	if _, err := fixture.reporting.Summary(ctx, params); err == nil {
 		t.Error("invalid display currency error = nil")

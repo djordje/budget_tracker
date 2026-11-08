@@ -67,16 +67,21 @@ func (s *Service) currencyByCodeTx(ctx context.Context, db Querier, code string)
 	return currency, nil
 }
 
-func (s *Service) defaultCurrencyCode(ctx context.Context, householdID uuid.UUID, kind Kind) (string, error) {
+func (s *Service) defaultCurrencyCode(ctx context.Context, householdID, userID uuid.UUID, kind Kind) (string, error) {
 	column := "default_spending_currency_code"
 	if kind == KindIncome {
 		column = "default_income_currency_code"
 	}
 
 	var code string
-	err := s.pool.QueryRow(ctx, fmt.Sprintf(
-		"SELECT %s FROM household_options WHERE household_id = $1", column,
-	), householdID).Scan(&code)
+	err := s.pool.QueryRow(ctx, fmt.Sprintf(`
+		SELECT COALESCE(u.%s, h.%s)
+		FROM household_options h
+		LEFT JOIN user_options u
+		  ON u.household_id = h.household_id AND u.user_id = $2
+		WHERE h.household_id = $1`, column, column),
+		householdID, userID,
+	).Scan(&code)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("household options not found")
 	}
