@@ -20,6 +20,9 @@
       <a href="/app/incomes/new" class="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
         Add income
       </a>
+      <a href="/app/reports" class="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+        View report
+      </a>
     </div>
 
     <div class="mt-4 flex flex-wrap gap-3">
@@ -28,16 +31,19 @@
           Household settings
         </a>
       {{end}}
+      <a href="/app/exchange-rates" class="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+        Exchange rates
+      </a>
       <a href="/app/households/new" class="inline-flex items-center justify-center rounded-xl border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
         Create another household
       </a>
     </div>
 
     <div class="mt-10 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 sm:p-8">
-      <h2 class="text-xl font-semibold text-emerald-950">Entries are ready</h2>
+      <h2 class="text-xl font-semibold text-emerald-950">Household tools are ready</h2>
       <p class="mt-2 max-w-2xl leading-7 text-emerald-900">
-        Record personal or household-wide income and spending. Exchange rates and
-        converted reports arrive in the next milestone.
+        Record personal or household-wide income and spending, maintain exchange
+        rates, and view converted reports with visible missing-rate warnings.
       </p>
     </div>
   {{else}}

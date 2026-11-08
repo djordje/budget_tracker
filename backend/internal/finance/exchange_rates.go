@@ -31,6 +31,19 @@ type ExchangeRate struct {
 	UpdatedAt        time.Time
 }
 
+// RateString formats the stored decimal without insignificant trailing zeroes.
+func (r ExchangeRate) RateString() string {
+	whole, fraction, found := strings.Cut(r.Rate, ".")
+	if !found {
+		return r.Rate
+	}
+	fraction = strings.TrimRight(fraction, "0")
+	if fraction == "" {
+		return whole
+	}
+	return whole + "." + fraction
+}
+
 // CreateExchangeRateParams contains the input for a new rate.
 type CreateExchangeRateParams struct {
 	HouseholdID      uuid.UUID

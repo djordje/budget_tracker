@@ -34,6 +34,8 @@ func serveHTMXDelete(t *testing.T, entries EntryService) *httptest.ResponseRecor
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
 		Entries:    entries,
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

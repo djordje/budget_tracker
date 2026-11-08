@@ -103,6 +103,12 @@ func noticeFromQuery(r *http.Request) string {
 		return "Entry updated."
 	case "entry_deleted":
 		return "Entry deleted."
+	case "rate_created":
+		return "Exchange rate added."
+	case "rate_updated":
+		return "Exchange rate updated."
+	case "rate_deleted":
+		return "Exchange rate deleted."
 	default:
 		return ""
 	}

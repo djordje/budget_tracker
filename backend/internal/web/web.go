@@ -17,6 +17,7 @@ import (
 	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
+	"budgettracker/internal/reporting"
 	site "budgettracker/web"
 )
 
@@ -38,6 +39,19 @@ type EntryService interface {
 	List(ctx context.Context, params finance.ListParams) (finance.ListResult, error)
 }
 
+// RateService is the exchange-rate behavior needed by HTML handlers.
+type RateService interface {
+	ListExchangeRates(ctx context.Context, actorID, householdID uuid.UUID) ([]finance.ExchangeRate, error)
+	CreateExchangeRate(ctx context.Context, params finance.CreateExchangeRateParams) (finance.ExchangeRate, error)
+	UpdateExchangeRate(ctx context.Context, params finance.UpdateExchangeRateParams) (finance.ExchangeRate, error)
+	DeleteExchangeRate(ctx context.Context, actorID uuid.UUID, rateID int64) error
+}
+
+// ReportService is the reporting behavior needed by HTML handlers.
+type ReportService interface {
+	Summary(ctx context.Context, params reporting.SummaryParams) (reporting.Summary, error)
+}
+
 // HouseholdService is the household behavior needed by HTML handlers.
 type HouseholdService interface {
 	CreateAndActivate(ctx context.Context, userID uuid.UUID, sessionTokenHash, name string) (households.Household, error)
@@ -53,6 +67,8 @@ type Deps struct {
 	Sessions   SessionService
 	Households HouseholdService
 	Entries    EntryService
+	Rates      RateService
+	Reports    ReportService
 	Cookies    auth.CookieConfig
 	StaticDir  string
 }
@@ -66,6 +82,8 @@ type Handler struct {
 	sessions   SessionService
 	households HouseholdService
 	entries    EntryService
+	rates      RateService
+	reports    ReportService
 	cookies    auth.CookieConfig
 }
 
@@ -84,6 +102,12 @@ func New(deps Deps) (*Handler, error) {
 	}
 	if deps.Entries == nil {
 		return nil, fmt.Errorf("entry service is required")
+	}
+	if deps.Rates == nil {
+		return nil, fmt.Errorf("rate service is required")
+	}
+	if deps.Reports == nil {
+		return nil, fmt.Errorf("report service is required")
 	}
 
 	pages, err := parsePages(site.Templates)
@@ -116,6 +140,8 @@ func New(deps Deps) (*Handler, error) {
 		sessions:   deps.Sessions,
 		households: deps.Households,
 		entries:    deps.Entries,
+		rates:      deps.Rates,
+		reports:    deps.Reports,
 		cookies:    deps.Cookies,
 	}, nil
 }

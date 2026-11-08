@@ -17,6 +17,7 @@ import (
 	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
+	"budgettracker/internal/reporting"
 )
 
 type stubSessions struct {
@@ -43,6 +44,7 @@ func (s stubSessions) SetActiveHousehold(context.Context, string, uuid.UUID, *uu
 type stubHouseholds struct {
 	households        []households.Household
 	err               error
+	getOptionsErr     error
 	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
 }
 
@@ -68,6 +70,9 @@ func (s stubHouseholds) Members(context.Context, uuid.UUID, uuid.UUID) ([]househ
 }
 
 func (s stubHouseholds) GetOptions(context.Context, uuid.UUID, uuid.UUID) (households.Options, error) {
+	if s.getOptionsErr != nil {
+		return households.Options{}, s.getOptionsErr
+	}
 	return households.Options{}, s.err
 }
 
@@ -88,6 +93,25 @@ func (stubEntries) List(context.Context, finance.ListParams) (finance.ListResult
 	return finance.ListResult{}, nil
 }
 
+type stubRates struct{}
+
+func (stubRates) ListExchangeRates(context.Context, uuid.UUID, uuid.UUID) ([]finance.ExchangeRate, error) {
+	return nil, nil
+}
+func (stubRates) CreateExchangeRate(context.Context, finance.CreateExchangeRateParams) (finance.ExchangeRate, error) {
+	return finance.ExchangeRate{}, nil
+}
+func (stubRates) UpdateExchangeRate(context.Context, finance.UpdateExchangeRateParams) (finance.ExchangeRate, error) {
+	return finance.ExchangeRate{}, nil
+}
+func (stubRates) DeleteExchangeRate(context.Context, uuid.UUID, int64) error { return nil }
+
+type stubReports struct{}
+
+func (stubReports) Summary(context.Context, reporting.SummaryParams) (reporting.Summary, error) {
+	return reporting.Summary{}, nil
+}
+
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	handler, err := New(Deps{
@@ -95,6 +119,8 @@ func newTestHandler(t *testing.T) *Handler {
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
 		Entries:    stubEntries{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -239,6 +265,8 @@ func TestStaticRejectsDotfilesAndDirectories(t *testing.T) {
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
 		Entries:    stubEntries{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 		StaticDir:  staticDir,
 	})
 	if err != nil {
@@ -283,6 +311,8 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
 		Entries:    stubEntries{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 		StaticDir:  staticDir,
 	})
 	if err != nil {
@@ -313,6 +343,8 @@ func TestNewRejectsMissingStaticDirectory(t *testing.T) {
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
 		Entries:    stubEntries{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 		StaticDir:  missing,
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
@@ -324,6 +356,8 @@ func TestNewRequiresSessionService(t *testing.T) {
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Households: stubHouseholds{},
 		Entries:    stubEntries{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
@@ -334,6 +368,8 @@ func TestNewRequiresHouseholdService(t *testing.T) {
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
 		Entries:  stubEntries{},
+		Rates:    stubRates{},
+		Reports:  stubReports{},
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
 	}
@@ -344,8 +380,28 @@ func TestNewRequiresEntryService(t *testing.T) {
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions:   stubSessions{},
 		Households: stubHouseholds{},
+		Rates:      stubRates{},
+		Reports:    stubReports{},
 	}); err == nil {
 		t.Fatal("New() error = nil, want error")
+	}
+}
+
+func TestNewRequiresRateAndReportServices(t *testing.T) {
+	base := Deps{
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions:   stubSessions{},
+		Households: stubHouseholds{},
+		Entries:    stubEntries{},
+		Reports:    stubReports{},
+	}
+	if _, err := New(base); err == nil {
+		t.Fatal("New() without rates error = nil, want error")
+	}
+	base.Rates = stubRates{}
+	base.Reports = nil
+	if _, err := New(base); err == nil {
+		t.Fatal("New() without reports error = nil, want error")
 	}
 }
 

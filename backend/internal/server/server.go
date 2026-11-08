@@ -11,6 +11,7 @@ import (
 	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 	"budgettracker/internal/httpapi"
+	"budgettracker/internal/reporting"
 	"budgettracker/internal/web"
 )
 
@@ -31,6 +32,7 @@ func New(deps Deps) (http.Handler, error) {
 	authService := auth.NewService(deps.DB)
 	householdService := households.NewService(deps.DB)
 	financeService := finance.NewService(deps.DB)
+	reportService := reporting.NewService(deps.DB, financeService)
 	cookies := auth.CookieConfig{Secure: deps.SecureCookies}
 	csrf := httpapi.NewCSRF(httpapi.CSRFConfig{Secure: deps.SecureCookies})
 	sessions := auth.NewMiddleware(authService, cookies, deps.Logger)
@@ -40,6 +42,8 @@ func New(deps Deps) (http.Handler, error) {
 		Sessions:   authService,
 		Households: householdService,
 		Entries:    financeService,
+		Rates:      financeService,
+		Reports:    reportService,
 		Cookies:    cookies,
 		StaticDir:  deps.StaticDir,
 	})
@@ -49,6 +53,8 @@ func New(deps Deps) (http.Handler, error) {
 	health := httpapi.NewHealth(deps.DB, deps.Logger)
 	householdAPI := httpapi.NewHouseholdHandler(householdService, deps.Logger)
 	entryAPI := httpapi.NewEntryHandler(financeService, deps.Logger)
+	rateAPI := httpapi.NewExchangeRateHandler(financeService, deps.Logger)
+	reportAPI := httpapi.NewReportHandler(reportService, deps.Logger)
 
 	protected := http.NewServeMux()
 	protected.Handle("GET /{$}", http.HandlerFunc(webHandler.Home))
@@ -64,6 +70,12 @@ func New(deps Deps) (http.Handler, error) {
 	protected.Handle("POST /app/households/{householdID}/settings", web.RequireAuth(webHandler.UpdateHousehold))
 	protected.Handle("POST /app/active-household", web.RequireAuth(webHandler.ActivateHousehold))
 	protected.Handle("GET /app/entries", web.RequireAuth(webHandler.Entries))
+	protected.Handle("GET /app/exchange-rates", web.RequireAuth(webHandler.ExchangeRatesPage))
+	protected.Handle("POST /app/exchange-rates", web.RequireAuth(webHandler.CreateExchangeRate))
+	protected.Handle("GET /app/exchange-rates/{rateID}/edit", web.RequireAuth(webHandler.EditExchangeRatePage))
+	protected.Handle("POST /app/exchange-rates/{rateID}", web.RequireAuth(webHandler.UpdateExchangeRate))
+	protected.Handle("POST /app/exchange-rates/{rateID}/delete", web.RequireAuth(webHandler.DeleteExchangeRate))
+	protected.Handle("GET /app/reports", web.RequireAuth(webHandler.ReportsPage))
 	protected.Handle("GET /app/incomes/new", web.RequireAuth(webHandler.NewIncomePage))
 	protected.Handle("POST /app/incomes", web.RequireAuth(webHandler.CreateIncome))
 	protected.Handle("GET /app/incomes/{entryID}/edit", web.RequireAuth(webHandler.EditIncomePage))
@@ -90,6 +102,11 @@ func New(deps Deps) (http.Handler, error) {
 	protected.Handle("GET /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.GetSpending))
 	protected.Handle("PATCH /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.UpdateSpending))
 	protected.Handle("DELETE /api/v1/spendings/{entryID}", httpapi.RequireAuthAPI(entryAPI.DeleteSpending))
+	protected.Handle("GET /api/v1/exchange-rates", httpapi.RequireAuthAPI(rateAPI.List))
+	protected.Handle("POST /api/v1/exchange-rates", httpapi.RequireAuthAPI(rateAPI.Create))
+	protected.Handle("PATCH /api/v1/exchange-rates/{rateID}", httpapi.RequireAuthAPI(rateAPI.Update))
+	protected.Handle("DELETE /api/v1/exchange-rates/{rateID}", httpapi.RequireAuthAPI(rateAPI.Delete))
+	protected.Handle("GET /api/v1/reports/summary", httpapi.RequireAuthAPI(reportAPI.Summary))
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))
