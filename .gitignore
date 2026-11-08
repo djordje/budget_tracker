@@ -1,0 +1,21 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+mise.local.toml
+.mise.local.toml
+
+# Go build and test output
+/bin/
+/backend/bin/
+/backend/coverage.out
+
+# Frontend dependencies and generated assets
+/backend/node_modules/
+/backend/web/static/css/*.css
+/backend/web/static/css/*.css.map
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

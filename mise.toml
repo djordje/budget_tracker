@@ -1,0 +1,47 @@
+[tools]
+go = "1.27.3"
+node = "24.14.0"
+
+[env]
+# Local overrides live in .env, which is ignored by git. Missing files are fine.
+_.file = ".env"
+
+[tasks.deps]
+description = "Download backend dependencies"
+run = "cd backend && go mod download"
+
+[tasks.tidy]
+description = "Tidy the Go module"
+run = "cd backend && go mod tidy"
+
+[tasks.format]
+description = "Format Go source"
+run = "cd backend && gofmt -w ."
+
+[tasks."format:check"]
+description = "Verify Go source is formatted"
+run = """
+cd backend
+files=$(gofmt -l .)
+if [ -n "$files" ]; then
+  echo "Go files need formatting:" >&2
+  echo "$files" >&2
+  exit 1
+fi
+"""
+
+[tasks.lint]
+description = "Run static analysis"
+run = "cd backend && go vet ./..."
+
+[tasks.test]
+description = "Run unit tests"
+run = "cd backend && go test ./..."
+
+[tasks.check]
+description = "Run formatting, linting, and unit tests"
+run = [
+  "mise run format:check",
+  "mise run lint",
+  "mise run test",
+]
