@@ -42,10 +42,21 @@ func run() error {
 	}
 	defer db.Close()
 
+	staticDir := cfg.StaticDir
+	if staticDir != "" {
+		if info, statErr := os.Stat(staticDir); statErr != nil || !info.IsDir() {
+			logger.Warn("static directory unavailable; using embedded assets",
+				"path", staticDir,
+				"error", statErr,
+			)
+			staticDir = ""
+		}
+	}
+
 	handler, err := server.New(server.Deps{
 		Logger:        logger,
 		DB:            db,
-		StaticDir:     cfg.StaticDir,
+		StaticDir:     staticDir,
 		SecureCookies: cfg.Env == "production",
 	})
 	if err != nil {

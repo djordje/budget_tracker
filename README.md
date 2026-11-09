@@ -73,7 +73,7 @@ empty by default.
 | `HTTP_ADDR` | `:8080` | HTTP listen address. |
 | `DATABASE_URL` | required | Required in every environment; never commit a real URL. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
-| `WEB_STATIC_DIR` | empty | Optional absolute path for disk assets; empty uses the embedded copies. |
+| `WEB_STATIC_DIR` | empty | Optional absolute path for disk assets. `mise run run` sets it; built binaries use the embedded copies. |
 | `TEST_DATABASE_URL` | local Compose URL | Used by PostgreSQL integration tests. |
 
 The Compose PostgreSQL instance binds to `127.0.0.1:5433` and uses trust

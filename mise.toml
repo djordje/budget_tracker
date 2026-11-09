@@ -71,7 +71,7 @@ run = "cd backend && go test ./..."
 [tasks.run]
 description = "Run the HTTP server"
 depends = ["assets:build"]
-run = "cd backend && WEB_STATIC_DIR=\"${WEB_STATIC_DIR:-web/static}\" go run ./cmd/server"
+run = "cd backend && WEB_STATIC_DIR=\"$(pwd)/web/static\" go run ./cmd/server"
 
 [tasks.build]
 description = "Build the server executable"
