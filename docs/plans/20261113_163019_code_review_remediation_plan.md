@@ -462,11 +462,14 @@ A later milestone's full suite does not retroactively validate an earlier amende
 
 | Milestone | Status |
 | --- | --- |
-| 0 — Project bootstrap | Pending remediation |
-| 1 — Identity and household vertical slice | Pending remediation |
-| 2 — Income and spending | Pending remediation |
-| 3 — Exchange rates and summaries | Pending remediation |
-| 4 — Invitations, preferences, and template reuse | Pending remediation |
-| 5 — Local quality and handoff | Pending remediation |
+| 0 — Project bootstrap | Complete |
+| 1 — Identity and household vertical slice | Complete |
+| 2 — Income and spending | Complete |
+| 3 — Exchange rates and summaries | Complete |
+| 4 — Invitations, preferences, and template reuse | Complete |
+| 5 — Local quality and handoff | Complete |
 
-No remediation checks are claimed by this planning document. Update this status in place as milestones are completed, and record unresolved implementation questions here rather than silently changing the confirmed decisions above.
+All milestones were validated with `mise run check:all` at their rewritten
+tips before the next milestone was replayed. Update this status in place as
+future work is completed, and record unresolved implementation questions here
+rather than silently changing the confirmed decisions above.

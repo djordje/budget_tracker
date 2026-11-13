@@ -24,4 +24,4 @@ Keep plans self-contained so a future session can resume work without relying on
 | Created | Plan | Status |
 | --- | --- | --- |
 | 2026-11-08 | [Budget Tracker MVP](./20261108_201136_budget_tracker_mvp_plan.md) | Initial implementation baseline |
-| 2026-11-13 | [Code Review Remediation](./20261113_163019_code_review_remediation_plan.md) | Active |
+| 2026-11-13 | [Code Review Remediation](./20261113_163019_code_review_remediation_plan.md) | Complete |
