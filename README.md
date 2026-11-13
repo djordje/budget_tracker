@@ -23,7 +23,7 @@ Install the pinned toolchain and prepare the environment:
 ```sh
 mise install
 mise run setup
-mise run run
+mise run dev
 ```
 
 `setup` copies `.env.example` to `.env` when needed, installs dependencies,
@@ -38,6 +38,7 @@ mise run format       # format Go source
 mise run lint         # run go vet
 mise run test         # run unit tests
 mise run build        # build bin/budget-tracker
+mise run dev          # run the development server
 mise run css:build    # compile Tailwind CSS
 mise run assets:build # compile CSS and copy HTMX
 mise run css:watch    # rebuild CSS while editing templates
@@ -73,7 +74,7 @@ empty by default.
 | `HTTP_ADDR` | `:8080` | HTTP listen address. |
 | `DATABASE_URL` | required | Required in every environment; never commit a real URL. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
-| `WEB_STATIC_DIR` | empty | Optional absolute path for disk assets. `mise run run` sets it; built binaries use the embedded copies. |
+| `WEB_STATIC_DIR` | empty | Optional absolute path for disk assets. `mise run dev` sets it; built binaries use the embedded copies. |
 | `TEST_DATABASE_URL` | local Compose URL | Used by PostgreSQL integration tests. |
 
 The Compose PostgreSQL instance binds to `127.0.0.1:5433` and uses trust
@@ -217,8 +218,8 @@ Tailwind CSS is compiled at build time from
 HTMX is copied from `node_modules` into `backend/web/static/js/htmx.min.js`;
 the small hand-written confirmation script lives in `backend/web/static/js/app.js`.
 Generated assets are ignored by git and embedded in the Go executable.
-`mise run run` and `mise run build` rebuild them automatically. In development,
-`mise run run` serves assets from disk, so `mise run css:watch` updates styling
+`mise run dev` and `mise run build` rebuild them automatically. In development,
+`mise run dev` serves assets from disk, so `mise run css:watch` updates styling
 without restarting the server. Production builds use the embedded copies.
 
 ## Database migrations

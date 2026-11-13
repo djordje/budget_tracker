@@ -68,8 +68,8 @@ run = "cd backend && go vet ./... && go vet -tags=integration ./..."
 description = "Run unit tests"
 run = "cd backend && go test ./..."
 
-[tasks.run]
-description = "Run the HTTP server"
+[tasks.dev]
+description = "Run the development HTTP server with disk assets"
 depends = ["assets:build"]
 run = "cd backend && WEB_STATIC_DIR=\"$(pwd)/web/static\" go run ./cmd/server"
 

@@ -10,7 +10,7 @@ Requirements: `mise` and Docker with Compose.
 ```sh
 mise install
 mise run setup
-mise run run
+mise run dev
 ```
 
 `setup` installs Go and frontend dependencies, compiles Tailwind and copies
@@ -121,7 +121,7 @@ The checklist in the active plan maps to automated coverage:
   `docker compose logs postgres`.
 - If CSS or HTMX is stale, run `mise run assets:build`; generated assets are
   intentionally not committed.
-- `mise run run` serves assets from disk using an absolute `WEB_STATIC_DIR`.
+- `mise run dev` serves assets from disk using an absolute `WEB_STATIC_DIR`.
   The built `./bin/budget-tracker` uses embedded assets; do not set a relative
   `WEB_STATIC_DIR` unless running from the directory it is relative to. If a
   configured development directory is missing, the server logs a warning and
