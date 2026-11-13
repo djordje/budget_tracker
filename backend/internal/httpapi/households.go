@@ -78,7 +78,7 @@ func (h *HouseholdHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var request createHouseholdRequest
 	if err := decodeJSON(w, r, &request); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid_request", "The request body must be a single JSON object.")
+		WriteDecodeError(w, err)
 		return
 	}
 
