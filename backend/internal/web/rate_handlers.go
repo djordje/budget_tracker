@@ -12,17 +12,17 @@ import (
 
 type exchangeRatesPageData struct {
 	pageData
-	Rates       []finance.ExchangeRate
-	Currencies  []finance.Currency
-	Form        rateFormValues
-	FieldErrors map[string]string
-	FormError   string
+	Rates      []finance.ExchangeRate
+	Currencies []finance.Currency
+	RateForm   exchangeRateFormPageData
 }
 
 type exchangeRateFormPageData struct {
 	pageData
 	Action      string
 	CancelURL   string
+	SubmitLabel string
+	FormClass   string
 	IsEdit      bool
 	From        string
 	To          string
@@ -133,16 +133,18 @@ func (h *Handler) EditExchangeRatePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, "exchange_rate_form", http.StatusOK, exchangeRateFormPageData{
-		pageData:   data,
-		Action:     "/app/exchange-rates/" + strconv.FormatInt(rate.ID, 10),
-		CancelURL:  "/app/exchange-rates",
-		IsEdit:     true,
-		From:       rate.FromCurrencyCode,
-		To:         rate.ToCurrencyCode,
-		Rate:       rate.RateString(),
-		RateDate:   rate.RateDate.Format(entryDateLayout),
-		IsMonthly:  rate.IsMonthly,
-		Currencies: currencies,
+		pageData:    data,
+		Action:      "/app/exchange-rates/" + strconv.FormatInt(rate.ID, 10),
+		CancelURL:   "/app/exchange-rates",
+		SubmitLabel: "Save rate",
+		FormClass:   "mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6",
+		IsEdit:      true,
+		From:        rate.FromCurrencyCode,
+		To:          rate.ToCurrencyCode,
+		Rate:        rate.RateString(),
+		RateDate:    rate.RateDate.Format(entryDateLayout),
+		IsMonthly:   rate.IsMonthly,
+		Currencies:  currencies,
 	})
 }
 
@@ -251,12 +253,23 @@ func (h *Handler) buildRatesPage(
 		fieldErrors = make(map[string]string)
 	}
 	return exchangeRatesPageData{
-		pageData:    data,
-		Rates:       rates,
-		Currencies:  currencies,
-		Form:        values,
-		FieldErrors: fieldErrors,
-		FormError:   formError,
+		pageData:   data,
+		Rates:      rates,
+		Currencies: currencies,
+		RateForm: exchangeRateFormPageData{
+			pageData:    data,
+			Action:      "/app/exchange-rates",
+			SubmitLabel: "Add rate",
+			FormClass:   "space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm",
+			From:        values.From,
+			To:          values.To,
+			Rate:        values.Rate,
+			RateDate:    values.RateDate,
+			IsMonthly:   values.IsMonthly,
+			Currencies:  currencies,
+			FieldErrors: fieldErrors,
+			FormError:   formError,
+		},
 	}, nil
 }
 
@@ -314,6 +327,8 @@ func (h *Handler) renderRateFormError(
 		pageData:    data,
 		Action:      "/app/exchange-rates/" + strconv.FormatInt(id, 10),
 		CancelURL:   "/app/exchange-rates",
+		SubmitLabel: "Save rate",
+		FormClass:   "mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6",
 		IsEdit:      true,
 		From:        values.From,
 		To:          values.To,
