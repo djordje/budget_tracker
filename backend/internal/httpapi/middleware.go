@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"budgettracker/internal/auth"
 )
 
 type requestIDKey struct{}
@@ -147,4 +149,15 @@ func (r *statusRecorder) Write(body []byte) (int, error) {
 // Unwrap lets http.ResponseController reach the underlying writer.
 func (r *statusRecorder) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
+}
+
+// RequireAuthAPI rejects unauthenticated API requests with a JSON 401.
+func RequireAuthAPI(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := auth.FromContext(r.Context()); !ok {
+			WriteError(w, http.StatusUnauthorized, "unauthenticated", "Sign in to access this resource.")
+			return
+		}
+		next(w, r)
+	}
 }

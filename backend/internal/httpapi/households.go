@@ -42,17 +42,6 @@ func NewHouseholdHandler(households HouseholdService, logger *slog.Logger) *Hous
 	return &HouseholdHandler{households: households, logger: logger}
 }
 
-// RequireAuthAPI rejects unauthenticated API requests with a JSON 401.
-func RequireAuthAPI(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := auth.FromContext(r.Context()); !ok {
-			WriteError(w, http.StatusUnauthorized, "unauthenticated", "Sign in to access this resource.")
-			return
-		}
-		next(w, r)
-	}
-}
-
 // List returns the authenticated user's households.
 func (h *HouseholdHandler) List(w http.ResponseWriter, r *http.Request) {
 	session, ok := auth.FromContext(r.Context())

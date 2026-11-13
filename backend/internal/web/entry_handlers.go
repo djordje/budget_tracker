@@ -623,18 +623,6 @@ func parseFormDate(raw string) (time.Time, error) {
 	return time.Parse(entryDateLayout, value)
 }
 
-func parseOptionalDate(raw string) (*time.Time, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return nil, nil
-	}
-	parsed, err := time.Parse(entryDateLayout, value)
-	if err != nil {
-		return nil, err
-	}
-	return &parsed, nil
-}
-
 func parsePage(raw string) (int, error) {
 	if strings.TrimSpace(raw) == "" {
 		return 1, nil
