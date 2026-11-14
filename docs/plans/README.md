@@ -17,7 +17,22 @@ Create each new plan as:
 
 ## Plan contents
 
-Keep plans self-contained so a future session can resume work without relying on chat history. Include relevant context, goals, scope and non-goals, confirmed decisions, proposed architecture, delivery milestones, acceptance criteria, and unresolved questions.
+Keep plans self-contained so a future session can resume work without relying on chat history. Start every new plan with a `Status:` line from the lifecycle vocabulary below; existing plans without one take their status from the index. Include relevant context, goals, scope and non-goals, confirmed decisions, proposed architecture, delivery milestones, acceptance criteria, and unresolved questions.
+
+## Status and lifecycle
+
+- **Proposed** — written for review; not approved or started.
+- **In progress** — approved; the plan is the active reference and changes in place as work proceeds.
+- **Complete** — delivered and validated; the plan is now a historical record.
+- **Superseded** — replaced by a newer plan; link in both directions and mark the newer plan as its successor.
+
+Rules:
+
+- Amend `Proposed` and `In progress` plans in place; they are living documents.
+- Treat `Complete` and `Superseded` plans as read-only history. Do not rewrite their milestone tables, acceptance criteria, confirmed decisions, or recorded validation results — including marking a delivered milestone incomplete because a later review found a gap.
+- Record new findings, regressions, and unmet acceptance in the active plan, or in a new plan that links to the completed one. The completed plan stays unchanged and keeps its `Complete` index status; the follow-up plan owns the work.
+- Correcting a broken link, typo, or factual error in the record is acceptable. Changing what was delivered or how it was validated is not.
+- Keep each index row's status synchronized with the plan header.
 
 ## Index
 

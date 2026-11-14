@@ -66,7 +66,7 @@ When asked to prepare or create a commit, follow `.agents/skills/commit-message/
 
 ## Documentation and testing
 
-- Update the active plan when confirmed product decisions or milestones change.
+- Update the active plan when confirmed product decisions or milestones change. Completed plans in `docs/plans` are read-only historical records: never rewrite their delivered milestones, acceptance criteria, or validation status. Record new findings in the active plan or a new plan that links back. Follow `docs/plans/README.md` for status and lifecycle rules.
 - Document local setup and development tasks as they are introduced; keep commands in documentation synchronized with `mise.toml`.
 - Test money arithmetic, rate precedence, inverse conversion, rounding, date boundaries, and missing-rate handling with table-driven tests.
 - Use real PostgreSQL for persistence and transaction integration tests where practical.
