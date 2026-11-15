@@ -194,3 +194,33 @@ func TestExchangeRateIdentifierBoundaries(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotFound, "UpdateExchangeRate(%d)", id)
 	}
 }
+
+func TestExchangeRateUpdateMapsVanishedRowToNotFound(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+
+	created, err := fixture.service.CreateExchangeRate(ctx, CreateExchangeRateParams{
+		HouseholdID:      fixture.householdID,
+		ActorID:          fixture.admin.User.ID,
+		FromCurrencyCode: "EUR",
+		ToCurrencyCode:   "RSD",
+		Rate:             "117.25",
+		RateDate:         date(2026, 10, 15),
+	})
+	require.NoError(t, err, "CreateExchangeRate() error")
+
+	vanishUpdatedRow(t, fixture.pool, "exchange_rates")
+
+	_, err = fixture.service.UpdateExchangeRate(ctx, UpdateExchangeRateParams{
+		ID:      created.ID,
+		ActorID: fixture.member.User.ID,
+		Rate:    strPtr("118"),
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "update of a rate deleted between load and write")
+
+	var remaining int
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM exchange_rates WHERE id = $1", created.ID,
+	).Scan(&remaining), "count exchange rates")
+	assert.Equal(t, 0, remaining, "row deleted by the trigger is still stored")
+}

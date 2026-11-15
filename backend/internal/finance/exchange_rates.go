@@ -204,6 +204,9 @@ func (s *Service) UpdateExchangeRate(ctx context.Context, params UpdateExchangeR
 		store.IsUniqueViolation(err, "exchange_rates_monthly_unique") {
 		return ExchangeRate{}, ErrRateExists
 	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ExchangeRate{}, ErrNotFound
+	}
 	if err != nil {
 		return ExchangeRate{}, fmt.Errorf("update exchange rate: %w", err)
 	}

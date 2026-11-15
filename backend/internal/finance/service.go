@@ -386,6 +386,9 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (Entry, error
 		RETURNING updated_at`, params.Kind.table()),
 		current.ID, amountMinor, currency.Code, entryDate.Format(entryDateLayout), description,
 	).Scan(&updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Entry{}, ErrNotFound
+	}
 	if err != nil {
 		return Entry{}, fmt.Errorf("update entry: %w", err)
 	}

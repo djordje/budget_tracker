@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgettracker/internal/auth"
@@ -77,6 +78,30 @@ func date(year int, month time.Month, day int) time.Time {
 }
 
 func strPtr(value string) *string { return &value }
+
+// vanishUpdatedRow makes updates to table report no updated row by deleting the
+// row in a BEFORE UPDATE trigger and returning NULL. That is the same statement
+// outcome a service sees when a concurrent delete commits between its load and
+// its write, without sleeps, retries, or a production-code test seam.
+func vanishUpdatedRow(t *testing.T, pool *pgxpool.Pool, table string) {
+	t.Helper()
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `
+		CREATE FUNCTION test_vanish_updated_row() RETURNS trigger AS $$
+		BEGIN
+			EXECUTE format('DELETE FROM %I WHERE id = $1', TG_TABLE_NAME) USING OLD.id;
+			RETURN NULL;
+		END
+		$$ LANGUAGE plpgsql`); err != nil {
+		require.NoError(t, err, "create vanish trigger function")
+	}
+	identifier := pgx.Identifier{table}.Sanitize()
+	if _, err := pool.Exec(ctx, "CREATE TRIGGER test_vanish_updated_row BEFORE UPDATE ON "+identifier+
+		" FOR EACH ROW EXECUTE FUNCTION test_vanish_updated_row()"); err != nil {
+		require.NoError(t, err, "create vanish trigger on %s", table)
+	}
+}
 
 func TestCurrencies(t *testing.T) {
 	fixture := newFinanceFixture(t)
@@ -277,6 +302,30 @@ func TestGetAndModifyAuthorization(t *testing.T) {
 
 	assert.NoError(t, fixture.service.Delete(ctx, fixture.member.User.ID, KindIncome, memberEntry.ID), "member delete own entry")
 	assert.NoError(t, fixture.service.Delete(ctx, fixture.admin.User.ID, KindSpending, householdWide.ID), "admin delete household-wide entry")
+}
+
+func TestUpdateMapsVanishedRowToNotFound(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+
+	created, err := fixture.service.Create(ctx, CreateParams{
+		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
+		Amount: "10", EntryDate: date(2026, 10, 1),
+	})
+	require.NoError(t, err, "create entry")
+
+	vanishUpdatedRow(t, fixture.pool, KindIncome.table())
+
+	_, err = fixture.service.Update(ctx, UpdateParams{
+		Kind: KindIncome, ID: created.ID, ActorID: fixture.admin.User.ID, Amount: strPtr("12"),
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "update of an entry deleted between load and write")
+
+	var remaining int
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM incomes WHERE id = $1", created.ID,
+	).Scan(&remaining), "count entries")
+	assert.Equal(t, 0, remaining, "row deleted by the trigger is still stored")
 }
 
 func TestListScopesFiltersAndPagination(t *testing.T) {
