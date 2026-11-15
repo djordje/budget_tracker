@@ -86,7 +86,11 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.sessions.SetActiveHousehold(r.Context(), session.TokenHash, session.User.ID, &invitation.HouseholdID); err != nil {
-		h.logger.Warn("set active household after invite acceptance", "error", err)
+		// The membership committed with the acceptance, so the join stands. Tell
+		// the visitor to select the household instead of failing the request.
+		h.logger.Error("set active household after invite acceptance", "error", err)
+		http.Redirect(w, r, "/app?notice=invitation_accepted_household_not_selected", http.StatusSeeOther)
+		return
 	}
 	http.Redirect(w, r, "/app?notice=invitation_accepted", http.StatusSeeOther)
 }

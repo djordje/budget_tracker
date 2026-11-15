@@ -112,6 +112,8 @@ func noticeFromQuery(r *http.Request) string {
 		return "Exchange rate deleted."
 	case "invitation_accepted":
 		return "You joined the household."
+	case "invitation_accepted_household_not_selected":
+		return "You joined the household. Select it from the household menu to make it active."
 	case "invitation_created":
 		return "Invitation created. Share the link with the invited person."
 	case "invitation_revoked":
