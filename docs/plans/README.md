@@ -42,3 +42,4 @@ Rules:
 | 2026-11-13 | [Code Review Remediation](./20261113_163019_code_review_remediation_plan.md) | Complete |
 | 2026-11-14 | [Test Assertion Library Adoption](./20261114_191415_test_assertion_library_adoption.md) | Complete |
 | 2026-11-14 | [Backend Review Remediation](./20261114_192841_backend_review_remediation.md) | Complete |
+| 2026-11-15 | [Backend Review Remediation Follow-ups](./20261115_170736_backend_review_remediation_followups.md) | In progress |
