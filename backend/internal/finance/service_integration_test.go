@@ -4,10 +4,12 @@ package finance
 
 import (
 	"context"
-	"errors"
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,14 +42,12 @@ func newFinanceFixture(t *testing.T) *financeFixture {
 	outsider := registerFinanceUser(t, authService, "outsider@example.com")
 
 	household, err := householdService.CreateAndActivate(ctx, admin.User.ID, admin.TokenHash, "Home")
-	if err != nil {
-		t.Fatalf("create household: %v", err)
-	}
+	require.NoError(t, err, "create household")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, household.ID, member.User.ID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	return &financeFixture{
@@ -68,9 +68,7 @@ func registerFinanceUser(t *testing.T, service *auth.Service, email string) auth
 		Email:     email,
 		Password:  "correct horse battery staple",
 	})
-	if err != nil {
-		t.Fatalf("register %s: %v", email, err)
-	}
+	require.NoError(t, err, "register %s", email)
 	return session
 }
 
@@ -83,19 +81,13 @@ func strPtr(value string) *string { return &value }
 func TestCurrencies(t *testing.T) {
 	fixture := newFinanceFixture(t)
 	currencies, err := fixture.service.Currencies(context.Background())
-	if err != nil {
-		t.Fatalf("Currencies() error = %v", err)
-	}
+	require.NoError(t, err, "Currencies() error")
 	byCode := make(map[string]Currency, len(currencies))
 	for _, currency := range currencies {
 		byCode[currency.Code] = currency
 	}
-	if byCode["RSD"].MinorUnits != 2 {
-		t.Errorf("RSD minor units = %d", byCode["RSD"].MinorUnits)
-	}
-	if byCode["JPY"].MinorUnits != 0 {
-		t.Errorf("JPY minor units = %d", byCode["JPY"].MinorUnits)
-	}
+	assert.Equal(t, int32(2), byCode["RSD"].MinorUnits, "RSD minor units")
+	assert.Equal(t, int32(0), byCode["JPY"].MinorUnits, "JPY minor units")
 }
 
 func TestCreateUsesDefaultsAndValidation(t *testing.T) {
@@ -106,7 +98,7 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 		UPDATE household_options
 		SET default_spending_currency_code = 'EUR'
 		WHERE household_id = $1`, fixture.householdID); err != nil {
-		t.Fatalf("set spending default: %v", err)
+		require.NoError(t, err, "set spending default")
 	}
 
 	income, err := fixture.service.Create(ctx, CreateParams{
@@ -116,24 +108,15 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 		Amount:      "1234.56",
 		Description: "  Salary  ",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if income.CurrencyCode != "RSD" || income.CurrencyMinorUnits != 2 {
-		t.Errorf("default income currency = %q (%d)", income.CurrencyCode, income.CurrencyMinorUnits)
-	}
-	if income.AmountMinor != 123456 {
-		t.Errorf("amount minor = %d", income.AmountMinor)
-	}
-	if income.UserID == nil || *income.UserID != fixture.admin.User.ID {
-		t.Errorf("user_id = %v, want admin", income.UserID)
-	}
-	if income.Description == nil || *income.Description != "Salary" {
-		t.Errorf("description = %v", income.Description)
-	}
-	if income.EntryDate.Format(entryDateLayout) != today().Format(entryDateLayout) {
-		t.Errorf("default date = %v", income.EntryDate)
-	}
+	require.NoError(t, err, "Create() error")
+	assert.Equal(t, "RSD", income.CurrencyCode, "default income currency")
+	assert.Equal(t, int32(2), income.CurrencyMinorUnits, "default income minor units")
+	assert.Equal(t, int64(123456), income.AmountMinor, "amount minor")
+	require.NotNil(t, income.UserID, "user_id")
+	assert.Equal(t, fixture.admin.User.ID, *income.UserID, "user_id")
+	require.NotNil(t, income.Description, "description")
+	assert.Equal(t, "Salary", *income.Description, "description")
+	assert.Equal(t, today().Format(entryDateLayout), income.EntryDate.Format(entryDateLayout), "default date")
 
 	spending, err := fixture.service.Create(ctx, CreateParams{
 		Kind:        KindSpending,
@@ -142,12 +125,9 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 		Amount:      "10.5",
 		EntryDate:   date(2026, 10, 5),
 	})
-	if err != nil {
-		t.Fatalf("Create spending error = %v", err)
-	}
-	if spending.CurrencyCode != "EUR" || spending.AmountMinor != 1050 {
-		t.Errorf("spending = %+v", spending)
-	}
+	require.NoError(t, err, "Create spending error")
+	assert.Equal(t, "EUR", spending.CurrencyCode, "spending = %+v", spending)
+	assert.Equal(t, int64(1050), spending.AmountMinor, "spending = %+v", spending)
 
 	householdWide, err := fixture.service.Create(ctx, CreateParams{
 		Kind:          KindSpending,
@@ -157,12 +137,8 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 		CurrencyCode:  "EUR",
 		HouseholdWide: true,
 	})
-	if err != nil {
-		t.Fatalf("Create household-wide error = %v", err)
-	}
-	if householdWide.UserID != nil {
-		t.Errorf("household-wide user_id = %v, want nil", householdWide.UserID)
-	}
+	require.NoError(t, err, "Create household-wide error")
+	assert.Nil(t, householdWide.UserID, "household-wide user_id")
 
 	memberEntry, err := fixture.service.Create(ctx, CreateParams{
 		Kind:        KindIncome,
@@ -170,22 +146,18 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 		ActorID:     fixture.member.User.ID,
 		Amount:      "5",
 	})
-	if err != nil {
-		t.Fatalf("member Create() error = %v", err)
-	}
-	if memberEntry.UserID == nil || *memberEntry.UserID != fixture.member.User.ID {
-		t.Errorf("member entry attribution = %v", memberEntry.UserID)
-	}
+	require.NoError(t, err, "member Create() error")
+	require.NotNil(t, memberEntry.UserID, "member entry attribution")
+	assert.Equal(t, fixture.member.User.ID, *memberEntry.UserID, "member entry attribution")
 
-	if _, err := fixture.service.Create(ctx, CreateParams{
+	_, err = fixture.service.Create(ctx, CreateParams{
 		Kind:          KindIncome,
 		HouseholdID:   fixture.householdID,
 		ActorID:       fixture.member.User.ID,
 		Amount:        "5",
 		HouseholdWide: true,
-	}); !errors.Is(err, ErrForbidden) {
-		t.Errorf("member household-wide error = %v, want ErrForbidden", err)
-	}
+	})
+	assert.ErrorIs(t, err, ErrForbidden, "member household-wide create")
 
 	tests := []struct {
 		name  string
@@ -216,16 +188,10 @@ func TestCreateUsesDefaultsAndValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := fixture.service.Create(ctx, tt.param)
-			if err == nil {
-				t.Fatal("Create() error = nil, want validation error")
-			}
+			require.Error(t, err, "Create()")
 			var validation *ValidationError
-			if !errors.As(err, &validation) {
-				t.Fatalf("error = %T, want ValidationError", err)
-			}
-			if _, ok := validation.Fields[tt.field]; !ok {
-				t.Errorf("fields = %v, want %q", validation.Fields, tt.field)
-			}
+			require.ErrorAs(t, err, &validation, "Create()")
+			assert.Contains(t, validation.Fields, tt.field, "fields = %v", validation.Fields)
 		})
 	}
 }
@@ -238,102 +204,79 @@ func TestGetAndModifyAuthorization(t *testing.T) {
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Amount: "10", EntryDate: date(2026, 10, 1),
 	})
-	if err != nil {
-		t.Fatalf("create admin entry: %v", err)
-	}
+	require.NoError(t, err, "create admin entry")
 	memberEntry, err := fixture.service.Create(ctx, CreateParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID,
 		Amount: "20", EntryDate: date(2026, 10, 2),
 	})
-	if err != nil {
-		t.Fatalf("create member entry: %v", err)
-	}
+	require.NoError(t, err, "create member entry")
 	householdWide, err := fixture.service.Create(ctx, CreateParams{
 		Kind: KindSpending, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Amount: "30", EntryDate: date(2026, 10, 3), HouseholdWide: true,
 	})
-	if err != nil {
-		t.Fatalf("create household-wide entry: %v", err)
-	}
+	require.NoError(t, err, "create household-wide entry")
 
-	if _, err := fixture.service.Get(ctx, fixture.admin.User.ID, KindIncome, memberEntry.ID); err != nil {
-		t.Errorf("admin Get member entry error = %v", err)
-	}
-	if _, err := fixture.service.Get(ctx, fixture.member.User.ID, KindIncome, adminEntry.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member Get admin entry error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.Get(ctx, fixture.member.User.ID, KindSpending, householdWide.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member Get household-wide error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.Get(ctx, fixture.outsider.User.ID, KindIncome, adminEntry.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider Get error = %v, want ErrNotFound", err)
-	}
+	_, err = fixture.service.Get(ctx, fixture.admin.User.ID, KindIncome, memberEntry.ID)
+	assert.NoError(t, err, "admin Get member entry")
+
+	_, err = fixture.service.Get(ctx, fixture.member.User.ID, KindIncome, adminEntry.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "member Get admin entry")
+
+	_, err = fixture.service.Get(ctx, fixture.member.User.ID, KindSpending, householdWide.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "member Get household-wide entry")
+
+	_, err = fixture.service.Get(ctx, fixture.outsider.User.ID, KindIncome, adminEntry.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "outsider Get")
 
 	amount := "25.50"
 	updated, err := fixture.service.Update(ctx, UpdateParams{
 		Kind: KindIncome, ID: memberEntry.ID, ActorID: fixture.member.User.ID, Amount: &amount,
 	})
-	if err != nil {
-		t.Fatalf("member update own entry error = %v", err)
-	}
-	if updated.AmountMinor != 2550 {
-		t.Errorf("updated amount = %d", updated.AmountMinor)
-	}
+	require.NoError(t, err, "member update own entry error")
+	assert.Equal(t, int64(2550), updated.AmountMinor, "updated amount")
 
-	if _, err := fixture.service.Update(ctx, UpdateParams{
+	_, err = fixture.service.Update(ctx, UpdateParams{
 		Kind: KindIncome, ID: memberEntry.ID, ActorID: fixture.admin.User.ID, Amount: &amount,
-	}); !errors.Is(err, ErrForbidden) {
-		t.Errorf("admin update member entry error = %v, want ErrForbidden", err)
-	}
-	if _, err := fixture.service.Update(ctx, UpdateParams{
+	})
+	assert.ErrorIs(t, err, ErrForbidden, "admin update member entry")
+	_, err = fixture.service.Update(ctx, UpdateParams{
 		Kind: KindIncome, ID: adminEntry.ID, ActorID: fixture.member.User.ID, Amount: &amount,
-	}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member update admin entry error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.Update(ctx, UpdateParams{
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "member update admin entry")
+	_, err = fixture.service.Update(ctx, UpdateParams{
 		Kind: KindSpending, ID: householdWide.ID, ActorID: fixture.member.User.ID, Amount: &amount,
-	}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member update household-wide error = %v, want ErrNotFound", err)
-	}
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "member update household-wide entry")
 	if _, err := fixture.service.Update(ctx, UpdateParams{
 		Kind: KindSpending, ID: householdWide.ID, ActorID: fixture.admin.User.ID, Amount: &amount,
 	}); err != nil {
-		t.Errorf("admin update household-wide error = %v", err)
+		assert.NoError(t, err, "admin update household-wide entry")
 	}
 
 	euro := "EUR"
-	if _, err := fixture.service.Update(ctx, UpdateParams{
+	_, err = fixture.service.Update(ctx, UpdateParams{
 		Kind: KindIncome, ID: memberEntry.ID, ActorID: fixture.member.User.ID, CurrencyCode: &euro,
-	}); err == nil {
-		t.Error("currency change without amount error = nil, want validation error")
-	}
+	})
+	assert.Error(t, err, "currency change without amount should be rejected")
 
 	empty := ""
 	cleared, err := fixture.service.Update(ctx, UpdateParams{
 		Kind: KindIncome, ID: memberEntry.ID, ActorID: fixture.member.User.ID, Description: &empty,
 	})
-	if err != nil {
-		t.Fatalf("clear description error = %v", err)
-	}
-	if cleared.Description != nil {
-		t.Errorf("cleared description = %v", cleared.Description)
-	}
+	require.NoError(t, err, "clear description error")
+	assert.Nil(t, cleared.Description, "cleared description")
 
-	if err := fixture.service.Delete(ctx, fixture.admin.User.ID, KindIncome, memberEntry.ID); !errors.Is(err, ErrForbidden) {
-		t.Errorf("admin delete member entry error = %v, want ErrForbidden", err)
-	}
-	if err := fixture.service.Delete(ctx, fixture.member.User.ID, KindIncome, adminEntry.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member delete admin entry error = %v, want ErrNotFound", err)
-	}
-	if err := fixture.service.Delete(ctx, fixture.member.User.ID, KindSpending, householdWide.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("member delete household-wide error = %v, want ErrNotFound", err)
-	}
-	if err := fixture.service.Delete(ctx, fixture.member.User.ID, KindIncome, memberEntry.ID); err != nil {
-		t.Errorf("member delete own entry error = %v", err)
-	}
-	if err := fixture.service.Delete(ctx, fixture.admin.User.ID, KindSpending, householdWide.ID); err != nil {
-		t.Errorf("admin delete household-wide error = %v", err)
-	}
+	err = fixture.service.Delete(ctx, fixture.admin.User.ID, KindIncome, memberEntry.ID)
+	assert.ErrorIs(t, err, ErrForbidden, "admin delete member entry")
+
+	err = fixture.service.Delete(ctx, fixture.member.User.ID, KindIncome, adminEntry.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "member delete admin entry")
+
+	err = fixture.service.Delete(ctx, fixture.member.User.ID, KindSpending, householdWide.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "member delete household-wide entry")
+
+	assert.NoError(t, fixture.service.Delete(ctx, fixture.member.User.ID, KindIncome, memberEntry.ID), "member delete own entry")
+	assert.NoError(t, fixture.service.Delete(ctx, fixture.admin.User.ID, KindSpending, householdWide.ID), "admin delete household-wide entry")
 }
 
 func TestListScopesFiltersAndPagination(t *testing.T) {
@@ -347,53 +290,41 @@ func TestListScopesFiltersAndPagination(t *testing.T) {
 	}
 	for _, params := range entries {
 		if _, err := fixture.service.Create(ctx, params); err != nil {
-			t.Fatalf("create list entry: %v", err)
+			require.NoError(t, err, "create list entry")
 		}
 	}
 
 	adminMine, err := fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, Scope: ScopeMine,
 	})
-	if err != nil {
-		t.Fatalf("admin List mine error = %v", err)
-	}
-	if adminMine.Total != 1 || len(adminMine.Entries) != 1 {
-		t.Errorf("admin mine = %+v, want one personal entry", adminMine)
-	}
+	require.NoError(t, err, "admin List mine error")
+	assert.Equal(t, 1, adminMine.Total, "admin mine = %+v", adminMine)
+	assert.Len(t, adminMine.Entries, 1, "admin mine = %+v", adminMine)
 
 	adminAll, err := fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, Scope: ScopeAll,
 	})
-	if err != nil {
-		t.Fatalf("admin List all error = %v", err)
-	}
-	if adminAll.Total != 3 || len(adminAll.Entries) != 3 {
-		t.Errorf("admin all total = %d, entries = %d", adminAll.Total, len(adminAll.Entries))
-	}
-	if adminAll.Entries[0].AmountMinor != 3000 {
-		t.Errorf("first entry amount = %d, want newest 3000", adminAll.Entries[0].AmountMinor)
-	}
+	require.NoError(t, err, "admin List all error")
+	assert.Equal(t, 3, adminAll.Total, "admin all total")
+	require.Len(t, adminAll.Entries, 3, "admin all entries")
+	assert.Equal(t, int64(3000), adminAll.Entries[0].AmountMinor, "newest entry amount")
 
 	memberMine, err := fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Scope: ScopeMine,
 	})
-	if err != nil {
-		t.Fatalf("member List mine error = %v", err)
-	}
-	if memberMine.Total != 1 || memberMine.Entries[0].AmountMinor != 2000 {
-		t.Errorf("member mine = %+v", memberMine)
-	}
+	require.NoError(t, err, "member List mine error")
+	require.Equal(t, 1, memberMine.Total, "member mine = %+v", memberMine)
+	require.Len(t, memberMine.Entries, 1)
+	assert.Equal(t, int64(2000), memberMine.Entries[0].AmountMinor, "member mine = %+v", memberMine)
 
-	if _, err := fixture.service.List(ctx, ListParams{
+	_, err = fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Scope: ScopeAll,
-	}); !errors.Is(err, ErrForbidden) {
-		t.Errorf("member List all error = %v, want ErrForbidden", err)
-	}
-	if _, err := fixture.service.List(ctx, ListParams{
+	})
+	assert.ErrorIs(t, err, ErrForbidden, "member List all")
+	_, err = fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.outsider.User.ID, Scope: ScopeMine,
-	}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider List error = %v, want ErrNotFound", err)
-	}
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "outsider List")
 
 	from := date(2026, 10, 2)
 	to := date(2026, 10, 2)
@@ -401,37 +332,32 @@ func TestListScopesFiltersAndPagination(t *testing.T) {
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Scope: ScopeAll, From: &from, To: &to,
 	})
-	if err != nil {
-		t.Fatalf("date filter List error = %v", err)
-	}
-	if filtered.Total != 1 || filtered.Entries[0].AmountMinor != 2000 {
-		t.Errorf("date filter = %+v", filtered)
-	}
+	require.NoError(t, err, "date filter List error")
+	require.Equal(t, 1, filtered.Total, "date filter = %+v", filtered)
+	require.Len(t, filtered.Entries, 1)
+	assert.Equal(t, int64(2000), filtered.Entries[0].AmountMinor, "date filter = %+v", filtered)
 
 	paged, err := fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Scope: ScopeAll, Page: 2, PageSize: 1,
 	})
-	if err != nil {
-		t.Fatalf("paged List error = %v", err)
-	}
-	if paged.Total != 3 || paged.TotalPages != 3 || len(paged.Entries) != 1 || paged.Entries[0].AmountMinor != 2000 {
-		t.Errorf("paged = %+v", paged)
-	}
+	require.NoError(t, err, "paged List error")
+	assert.Equal(t, 3, paged.Total, "paged = %+v", paged)
+	assert.Equal(t, 3, paged.TotalPages, "paged = %+v", paged)
+	require.Len(t, paged.Entries, 1, "paged = %+v", paged)
+	assert.Equal(t, int64(2000), paged.Entries[0].AmountMinor, "paged = %+v", paged)
 
 	reversedFrom, reversedTo := date(2026, 10, 5), date(2026, 10, 1)
-	if _, err := fixture.service.List(ctx, ListParams{
+	_, err = fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Scope: ScopeAll, From: &reversedFrom, To: &reversedTo,
-	}); err == nil {
-		t.Error("reversed date range error = nil, want validation error")
-	}
-	if _, err := fixture.service.List(ctx, ListParams{
+	})
+	assert.Error(t, err, "reversed date range should be rejected")
+	_, err = fixture.service.List(ctx, ListParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
 		Scope: ScopeAll, PageSize: 101,
-	}); err == nil {
-		t.Error("oversized page error = nil, want validation error")
-	}
+	})
+	assert.Error(t, err, "oversized page should be rejected")
 }
 
 func TestEmptyDescriptionAndSpendingVisibility(t *testing.T) {
@@ -442,24 +368,19 @@ func TestEmptyDescriptionAndSpendingVisibility(t *testing.T) {
 		Kind: KindSpending, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID,
 		Amount: "9.99", CurrencyCode: "EUR", Description: "   ",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if entry.Description != nil {
-		t.Errorf("empty description = %v, want nil", entry.Description)
-	}
-	if entry.AmountString() != "9.99" || entry.DisplayAmount() != "9.99" {
-		t.Errorf("formatted amounts = %q, %q", entry.AmountString(), entry.DisplayAmount())
-	}
-	if _, err := fixture.service.Get(ctx, fixture.member.User.ID, KindSpending, entry.ID); err != nil {
-		t.Errorf("member Get own spending error = %v", err)
-	}
-	if _, err := fixture.service.Get(ctx, fixture.admin.User.ID, KindSpending, entry.ID); err != nil {
-		t.Errorf("admin Get member spending error = %v", err)
-	}
-	if _, err := fixture.service.Get(ctx, fixture.outsider.User.ID, KindSpending, entry.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider Get spending error = %v, want ErrNotFound", err)
-	}
+	require.NoError(t, err, "Create() error")
+	assert.Nil(t, entry.Description, "empty description")
+	assert.Equal(t, "9.99", entry.AmountString(), "formatted amount")
+	assert.Equal(t, "9.99", entry.DisplayAmount(), "display amount")
+
+	_, err = fixture.service.Get(ctx, fixture.member.User.ID, KindSpending, entry.ID)
+	assert.NoError(t, err, "member Get own spending")
+
+	_, err = fixture.service.Get(ctx, fixture.admin.User.ID, KindSpending, entry.ID)
+	assert.NoError(t, err, "admin Get member spending")
+
+	_, err = fixture.service.Get(ctx, fixture.outsider.User.ID, KindSpending, entry.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "outsider Get spending")
 }
 
 func TestEntryIDsArePositiveIntegers(t *testing.T) {
@@ -470,12 +391,8 @@ func TestEntryIDsArePositiveIntegers(t *testing.T) {
 		ActorID:     fixture.admin.User.ID,
 		Amount:      "10",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if entry.ID <= 0 {
-		t.Errorf("entry ID = %d, want a positive integer", entry.ID)
-	}
+	require.NoError(t, err, "Create() error")
+	assert.Positive(t, entry.ID, "entry ID")
 }
 
 func TestListRejectsUnrepresentableOffsets(t *testing.T) {
@@ -496,24 +413,16 @@ func TestListRejectsUnrepresentableOffsets(t *testing.T) {
 		params.PageSize = maxPageSize
 		_, err := fixture.service.List(ctx, params)
 		var validation *ValidationError
-		if !errors.As(err, &validation) {
-			t.Fatalf("List(page=%d) error = %v, want ValidationError", page, err)
-		}
-		if validation.Fields["page"] == "" {
-			t.Errorf("List(page=%d) fields = %v, want page error", page, validation.Fields)
-		}
+		require.ErrorAs(t, err, &validation, "List(page=%d)", page)
+		assert.NotEmpty(t, validation.Fields["page"], "List(page=%d) fields = %v", page, validation.Fields)
 	}
 
 	params := base
 	params.Page = boundaryPage
 	params.PageSize = maxPageSize
 	result, err := fixture.service.List(ctx, params)
-	if err != nil {
-		t.Fatalf("List(boundary page) error = %v", err)
-	}
-	if len(result.Entries) != 0 {
-		t.Errorf("boundary page returned %d entries, want an empty page", len(result.Entries))
-	}
+	require.NoError(t, err, "List(boundary page) error")
+	assert.Empty(t, result.Entries, "boundary page")
 }
 
 func TestDescriptionTextValidation(t *testing.T) {
@@ -527,12 +436,9 @@ func TestDescriptionTextValidation(t *testing.T) {
 		Amount:      "10",
 		Description: "  Line one\nLine two\tTabbed  ",
 	})
-	if err != nil {
-		t.Fatalf("Create() with control whitespace error = %v", err)
-	}
-	if valid.Description == nil || *valid.Description != "Line one\nLine two\tTabbed" {
-		t.Errorf("description = %v, want trimmed newline/tab content", valid.Description)
-	}
+	require.NoError(t, err, "Create() with control whitespace error")
+	require.NotNil(t, valid.Description, "description")
+	assert.Equal(t, "Line one\nLine two\tTabbed", *valid.Description, "description")
 
 	invalid := []struct {
 		name        string
@@ -552,12 +458,8 @@ func TestDescriptionTextValidation(t *testing.T) {
 				Description: tt.description,
 			})
 			var validation *ValidationError
-			if !errors.As(err, &validation) {
-				t.Fatalf("Create() error = %v, want ValidationError", err)
-			}
-			if validation.Fields["description"] == "" {
-				t.Errorf("fields = %v, want description error", validation.Fields)
-			}
+			require.ErrorAs(t, err, &validation, "Create()")
+			assert.NotEmpty(t, validation.Fields["description"], "fields = %v", validation.Fields)
 		})
 	}
 }
@@ -573,35 +475,23 @@ func TestUserCurrencyOverridesAffectEntryDefaults(t *testing.T) {
 		DefaultIncomeCurrencyCode:   &income,
 		DefaultSpendingCurrencyCode: &spending,
 	}); err != nil {
-		t.Fatalf("SetUserOptions() error = %v", err)
+		require.NoError(t, err, "SetUserOptions()")
 	}
 
 	incomeEntry, err := fixture.service.Create(ctx, CreateParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Amount: "5",
 	})
-	if err != nil {
-		t.Fatalf("member income Create() error = %v", err)
-	}
-	if incomeEntry.CurrencyCode != "USD" {
-		t.Errorf("member income default = %q, want USD", incomeEntry.CurrencyCode)
-	}
+	require.NoError(t, err, "member income Create() error")
+	assert.Equal(t, "USD", incomeEntry.CurrencyCode, "member income default")
 	spendingEntry, err := fixture.service.Create(ctx, CreateParams{
 		Kind: KindSpending, HouseholdID: fixture.householdID, ActorID: fixture.member.User.ID, Amount: "5",
 	})
-	if err != nil {
-		t.Fatalf("member spending Create() error = %v", err)
-	}
-	if spendingEntry.CurrencyCode != "EUR" {
-		t.Errorf("member spending default = %q, want EUR", spendingEntry.CurrencyCode)
-	}
+	require.NoError(t, err, "member spending Create() error")
+	assert.Equal(t, "EUR", spendingEntry.CurrencyCode, "member spending default")
 
 	adminEntry, err := fixture.service.Create(ctx, CreateParams{
 		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, Amount: "5",
 	})
-	if err != nil {
-		t.Fatalf("admin income Create() error = %v", err)
-	}
-	if adminEntry.CurrencyCode != "RSD" {
-		t.Errorf("admin income default = %q, want household RSD", adminEntry.CurrencyCode)
-	}
+	require.NoError(t, err, "admin income Create() error")
+	assert.Equal(t, "RSD", adminEntry.CurrencyCode, "admin income default")
 }
