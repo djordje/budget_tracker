@@ -102,6 +102,32 @@ func TestRegisterLoginAndSessions(t *testing.T) {
 	assert.Zero(t, expiredCount, "expired session was not deleted")
 }
 
+func TestLoginRejectsUnknownEmailAndWrongPassword(t *testing.T) {
+	pool := testdb.New(t)
+	service := NewService(pool)
+	ctx := context.Background()
+
+	registered, err := service.Register(ctx, RegisterParams{
+		FirstName: "Ada",
+		LastName:  "Lovelace",
+		Email:     "ada@example.com",
+		Password:  "correct horse battery staple",
+	})
+	require.NoError(t, err, "Register() error")
+
+	_, wrongPasswordErr := service.Login(ctx, "ada@example.com", "wrong password")
+	_, unknownEmailErr := service.Login(ctx, "missing@example.com", "correct horse battery staple")
+
+	assert.ErrorIs(t, wrongPasswordErr, ErrInvalidCredentials, "Login() wrong password")
+	assert.ErrorIs(t, unknownEmailErr, ErrInvalidCredentials, "Login() unknown email")
+
+	var sessions int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM sessions WHERE user_id = $1", registered.User.ID).Scan(&sessions); err != nil {
+		require.NoError(t, err, "count sessions")
+	}
+	assert.Equal(t, 1, sessions, "failed logins created a session")
+}
+
 func TestRegisterValidationDoesNotTouchDatabase(t *testing.T) {
 	service := NewService(nil)
 

@@ -24,6 +24,12 @@ const SessionLifetime = 30 * 24 * time.Hour
 // expired sessions.
 const sessionCleanupInterval = time.Hour
 
+// dummyPasswordHash is a valid Argon2id hash of a discarded random password.
+// Login verifies it when the email has no credentials so that known and
+// unknown emails pay the same Argon2id work. service_test pins its parameters
+// to the production constants above.
+const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=2$20sxAOei49VyQuHFAZsJfA$7aQLf0bH6g9RDLWV9Hrw5LRsij7yVDG/NoiqBw0OdsQ"
+
 var (
 	// ErrInvalidCredentials deliberately does not distinguish between an
 	// unknown email and an incorrect password.
@@ -66,9 +72,19 @@ type RegisterParams struct {
 	Password  string
 }
 
+// credentialLookup loads the user and encoded password hash for a normalized
+// email. A missing row surfaces as pgx.ErrNoRows.
+type credentialLookup func(ctx context.Context, normalizedEmail string) (User, string, error)
+
+// passwordVerifier reports whether password matches an encoded password hash.
+type passwordVerifier func(encoded, password string) (bool, error)
+
 // Service owns credential, registration, login, and session persistence.
 type Service struct {
 	pool *pgxpool.Pool
+
+	lookup credentialLookup
+	verify passwordVerifier
 
 	cleanupMu   sync.Mutex
 	lastCleanup time.Time
@@ -78,7 +94,8 @@ type Service struct {
 
 // NewService constructs an authentication service.
 func NewService(pool *pgxpool.Pool) *Service {
-	service := &Service{pool: pool, now: time.Now}
+	service := &Service{pool: pool, now: time.Now, verify: VerifyPassword}
+	service.lookup = service.lookupCredentials
 	service.cleanup = service.DeleteExpiredSessions
 	return service
 }
@@ -143,37 +160,9 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (Session,
 
 // Login verifies credentials and creates a new session.
 func (s *Service) Login(ctx context.Context, email, password string) (Session, error) {
-	normalized, err := NormalizeEmail(email)
+	user, err := s.authenticate(ctx, email, password)
 	if err != nil {
-		return Session{}, ErrInvalidCredentials
-	}
-
-	var user User
-	var passwordHash string
-	err = s.pool.QueryRow(ctx, `
-		SELECT u.id, u.first_name, u.last_name, c.email_normalized, c.password_hash,
-		       u.created_at, u.updated_at
-		FROM auth_credentials c
-		JOIN users u ON u.id = c.user_id
-		WHERE c.email_normalized = $1`,
-		normalized,
-	).Scan(
-		&user.ID, &user.FirstName, &user.LastName, &user.Email, &passwordHash,
-		&user.CreatedAt, &user.UpdatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Session{}, ErrInvalidCredentials
-	}
-	if err != nil {
-		return Session{}, fmt.Errorf("look up credentials: %w", err)
-	}
-
-	matches, err := VerifyPassword(passwordHash, password)
-	if err != nil {
-		return Session{}, fmt.Errorf("verify password: %w", err)
-	}
-	if !matches {
-		return Session{}, ErrInvalidCredentials
+		return Session{}, err
 	}
 
 	session, err := s.createSession(ctx, user)
@@ -182,6 +171,54 @@ func (s *Service) Login(ctx context.Context, email, password string) (Session, e
 	}
 	s.maybeDeleteExpiredSessions(ctx)
 	return session, nil
+}
+
+// authenticate resolves the user for a set of credentials. It always pays one
+// Argon2id verification, including when the email has no credentials, so the
+// response does not reveal whether an account exists.
+func (s *Service) authenticate(ctx context.Context, email, password string) (User, error) {
+	normalized, err := NormalizeEmail(email)
+	if err != nil {
+		return User{}, ErrInvalidCredentials
+	}
+
+	user, passwordHash, err := s.lookup(ctx, normalized)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, err := s.verify(dummyPasswordHash, password); err != nil {
+			return User{}, fmt.Errorf("verify dummy password: %w", err)
+		}
+		return User{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("look up credentials: %w", err)
+	}
+
+	matches, err := s.verify(passwordHash, password)
+	if err != nil {
+		return User{}, fmt.Errorf("verify password: %w", err)
+	}
+	if !matches {
+		return User{}, ErrInvalidCredentials
+	}
+
+	return user, nil
+}
+
+func (s *Service) lookupCredentials(ctx context.Context, normalizedEmail string) (User, string, error) {
+	var user User
+	var passwordHash string
+	err := s.pool.QueryRow(ctx, `
+		SELECT u.id, u.first_name, u.last_name, c.email_normalized, c.password_hash,
+		       u.created_at, u.updated_at
+		FROM auth_credentials c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.email_normalized = $1`,
+		normalizedEmail,
+	).Scan(
+		&user.ID, &user.FirstName, &user.LastName, &user.Email, &passwordHash,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	return user, passwordHash, err
 }
 
 // SessionByToken resolves a raw session token to its user.
