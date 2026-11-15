@@ -20,6 +20,13 @@ const (
 	argonKeyLength          = 32
 )
 
+// Password length bounds shared by registration validation and login.
+// Login rejects longer passwords before doing any password work.
+const (
+	PasswordMinLength = 12
+	PasswordMaxLength = 128
+)
+
 var errInvalidPasswordHash = errors.New("invalid password hash")
 
 // HashPassword hashes a password with Argon2id using a fresh random salt.

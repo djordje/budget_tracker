@@ -23,15 +23,23 @@ import (
 )
 
 type stubSessions struct {
-	session auth.Session
-	err     error
+	session  auth.Session
+	err      error
+	login    func(ctx context.Context, email, password string) (auth.Session, error)
+	register func(ctx context.Context, params auth.RegisterParams) (auth.Session, error)
 }
 
-func (s stubSessions) Register(context.Context, auth.RegisterParams) (auth.Session, error) {
+func (s stubSessions) Register(ctx context.Context, params auth.RegisterParams) (auth.Session, error) {
+	if s.register != nil {
+		return s.register(ctx, params)
+	}
 	return s.session, s.err
 }
 
-func (s stubSessions) Login(context.Context, string, string) (auth.Session, error) {
+func (s stubSessions) Login(ctx context.Context, email, password string) (auth.Session, error) {
+	if s.login != nil {
+		return s.login(ctx, email, password)
+	}
 	return s.session, s.err
 }
 

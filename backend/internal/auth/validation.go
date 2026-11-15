@@ -56,9 +56,9 @@ func validateRegistration(params RegisterParams) (string, *ValidationError) {
 	}
 
 	switch {
-	case len(params.Password) < 12:
+	case len(params.Password) < PasswordMinLength:
 		validation.add("password", "Password must be at least 12 characters.")
-	case len(params.Password) > 128:
+	case len(params.Password) > PasswordMaxLength:
 		validation.add("password", "Password must be 128 characters or fewer.")
 	}
 

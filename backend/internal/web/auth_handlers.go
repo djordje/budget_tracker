@@ -60,6 +60,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
+	// Keep oversized passwords from crossing the service boundary; the service
+	// enforces the same bound for every caller.
+	if len(password) > auth.PasswordMaxLength {
+		h.render(w, r, "login", http.StatusUnprocessableEntity, loginPageData{
+			pageData:  h.basePageData(r, "Sign in"),
+			Email:     email,
+			Next:      safeNextPath(r.FormValue("next"), ""),
+			FormError: "Email or password is incorrect.",
+		})
+		return
+	}
 	limiterKey := loginLimitKey(r, email)
 
 	if !h.loginLimiter.TryAcquire(limiterKey) {

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -50,6 +51,47 @@ func TestLoginVerifiesPasswordForMissingAndKnownEmail(t *testing.T) {
 
 			assert.ErrorIs(t, err, ErrInvalidCredentials, "Login() error")
 			assert.Equal(t, []string{tt.wantEncoded}, verified, "password verifications")
+		})
+	}
+}
+
+func TestLoginRejectsOversizedPasswordBeforeHashing(t *testing.T) {
+	tests := []struct {
+		name              string
+		password          string
+		wantLookups       int32
+		wantVerifications int32
+	}{
+		{
+			name:              "at the maximum",
+			password:          strings.Repeat("x", PasswordMaxLength),
+			wantLookups:       1,
+			wantVerifications: 1,
+		},
+		{
+			name:     "above the maximum",
+			password: strings.Repeat("x", PasswordMaxLength+1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewService(nil)
+			var lookups, verifications atomic.Int32
+			service.lookup = func(context.Context, string) (User, string, error) {
+				lookups.Add(1)
+				return User{}, "", pgx.ErrNoRows
+			}
+			service.verify = func(string, string) (bool, error) {
+				verifications.Add(1)
+				return false, nil
+			}
+
+			_, err := service.Login(context.Background(), "ada@example.com", tt.password)
+
+			assert.ErrorIs(t, err, ErrInvalidCredentials, "Login() error")
+			assert.Equal(t, tt.wantLookups, lookups.Load(), "credential lookups")
+			assert.Equal(t, tt.wantVerifications, verifications.Load(), "password verifications")
 		})
 	}
 }

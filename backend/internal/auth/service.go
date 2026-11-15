@@ -160,6 +160,13 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (Session,
 
 // Login verifies credentials and creates a new session.
 func (s *Service) Login(ctx context.Context, email, password string) (Session, error) {
+	// Registration caps passwords at PasswordMaxLength, so a longer password can
+	// never match. Reject it before the lookup and hashing so oversized input
+	// cannot force Argon2id work.
+	if len(password) > PasswordMaxLength {
+		return Session{}, ErrInvalidCredentials
+	}
+
 	user, err := s.authenticate(ctx, email, password)
 	if err != nil {
 		return Session{}, err

@@ -56,7 +56,7 @@ func TestValidateRegistration(t *testing.T) {
 		{name: "missing last name", param: RegisterParams{FirstName: "A", Email: "a@example.com", Password: "correct horse battery"}, field: "last_name"},
 		{name: "invalid email", param: RegisterParams{FirstName: "A", LastName: "L", Email: "invalid", Password: "correct horse battery"}, field: "email"},
 		{name: "short password", param: RegisterParams{FirstName: "A", LastName: "L", Email: "a@example.com", Password: "short"}, field: "password"},
-		{name: "long password", param: RegisterParams{FirstName: "A", LastName: "L", Email: "a@example.com", Password: strings.Repeat("x", 129)}, field: "password"},
+		{name: "long password", param: RegisterParams{FirstName: "A", LastName: "L", Email: "a@example.com", Password: strings.Repeat("x", PasswordMaxLength+1)}, field: "password"},
 		{name: "invalid UTF-8 first name", param: RegisterParams{FirstName: string([]byte{'A', 0xff}), LastName: "L", Email: "a@example.com", Password: "correct horse battery"}, field: "first_name"},
 		{name: "NUL last name", param: RegisterParams{FirstName: "A", LastName: "L\x00ovelace", Email: "a@example.com", Password: "correct horse battery"}, field: "last_name"},
 		{name: "control character first name", param: RegisterParams{FirstName: "A\nB", LastName: "L", Email: "a@example.com", Password: "correct horse battery"}, field: "first_name"},
@@ -72,6 +72,16 @@ func TestValidateRegistration(t *testing.T) {
 			assert.Contains(t, err.Fields, tt.field, "fields = %v", err.Fields)
 		})
 	}
+}
+
+func TestValidateRegistrationAcceptsMaximumLengthPassword(t *testing.T) {
+	_, err := validateRegistration(RegisterParams{
+		FirstName: "Ada",
+		LastName:  "Lovelace",
+		Email:     "ada@example.com",
+		Password:  strings.Repeat("x", PasswordMaxLength),
+	})
+	assert.Nil(t, err, "validateRegistration()")
 }
 
 func TestValidateRegistrationAcceptsUnicodeNames(t *testing.T) {
