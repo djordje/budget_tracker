@@ -94,6 +94,8 @@ func TestConvertMinorRoundsHalfEven(t *testing.T) {
 	}{
 		{name: "2.545 to 2.54", amount: 2545, fromUnits: 3, toUnits: 2, rate: one, want: 254},
 		{name: "2.555 to 2.56", amount: 2555, fromUnits: 3, toUnits: 2, rate: one, want: 256},
+		{name: "rounds down below half", amount: 4, fromUnits: 2, toUnits: 2, rate: big.NewRat(1, 10), want: 0},
+		{name: "half rounds to even zero", amount: 5, fromUnits: 2, toUnits: 2, rate: big.NewRat(1, 10), want: 0},
 		{name: "2.545 rate one same units", amount: 2545, fromUnits: 2, toUnits: 2, rate: one, want: 2545},
 		{name: "direct rate", amount: 10000, fromUnits: 2, toUnits: 2, rate: big.NewRat(100, 1), want: 1_000_000},
 		{name: "inverse rate", amount: 1_000_000, fromUnits: 2, toUnits: 2, rate: big.NewRat(1, 100), want: 10000},

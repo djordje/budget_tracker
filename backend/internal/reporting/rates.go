@@ -134,15 +134,6 @@ func ConvertMinor(amountMinor int64, fromMinorUnits, toMinorUnits int32, rate *b
 }
 
 func roundHalfEven(value *big.Rat) (int64, error) {
-	if value.Sign() < 0 {
-		absolute := new(big.Rat).Abs(value)
-		rounded, err := roundHalfEven(absolute)
-		if err != nil {
-			return 0, err
-		}
-		return -rounded, nil
-	}
-
 	numerator := value.Num()
 	denominator := value.Denom()
 	quotient := new(big.Int).Quo(numerator, denominator)
