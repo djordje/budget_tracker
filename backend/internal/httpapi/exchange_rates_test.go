@@ -88,6 +88,27 @@ func TestExchangeRateHandlerCreateResponse(t *testing.T) {
 	assert.Equal(t, "117.5", body.Rate.Rate, "rate = %+v", body.Rate)
 }
 
+func TestExchangeRateHandlerPreservesValidationCopy(t *testing.T) {
+	handler := NewExchangeRateHandler(stubRateService{
+		create: func(context.Context, finance.CreateExchangeRateParams) (finance.ExchangeRate, error) {
+			return finance.ExchangeRate{}, &finance.ValidationError{
+				Fields: map[string]string{"rate": "Enter a smaller rate."},
+			}
+		},
+	}, discardLogger())
+
+	recorder := serveEntryRequest(t, activeEntrySession(), handler.Create,
+		httptest.NewRequest(http.MethodPost, "/api/v1/exchange-rates",
+			strings.NewReader(`{"from_currency_code":"EUR","to_currency_code":"RSD","rate":"1000000000000","rate_date":"2026-10-01"}`)))
+
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
+
+	var body ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "validation_failed", body.Error.Code, "error code")
+	assert.Equal(t, "Enter a smaller rate.", body.Error.Fields["rate"], "validation copy")
+}
+
 func TestExchangeRateHandlerMapsServiceErrors(t *testing.T) {
 	tests := []struct {
 		name       string

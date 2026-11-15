@@ -6,6 +6,7 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - staticcheck
     - testifylint
   settings:
     testifylint:

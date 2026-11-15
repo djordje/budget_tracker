@@ -91,6 +91,14 @@ func (e *ValidationError) add(field, message string) {
 	}
 }
 
+// validationMessage is user-facing copy for one validation field. It is
+// deliberately not an error: Go error text is a lowercase diagnostic, while
+// this sentence is rendered verbatim and keeps its capital letter and final
+// period.
+type validationMessage struct {
+	text string
+}
+
 // Entry is an income or spending row. CurrencyMinorUnits is loaded from the
 // currency table for formatting and is not part of the entry row.
 type Entry struct {
@@ -237,9 +245,9 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (Entry, error
 	}
 	entryDate = dateOnly(entryDate)
 
-	description, descriptionErr := normalizeDescription(params.Description)
-	if descriptionErr != nil {
-		validation.add("description", descriptionErr.Error())
+	description, descriptionMessage := normalizeDescription(params.Description)
+	if descriptionMessage != nil {
+		validation.add("description", descriptionMessage.text)
 	}
 	if len(validation.Fields) > 0 {
 		return Entry{}, validation
@@ -358,9 +366,11 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (Entry, error
 		}
 	}
 	if params.Description != nil {
-		description, err = normalizeDescription(*params.Description)
-		if err != nil {
-			validation.add("description", err.Error())
+		normalized, descriptionMessage := normalizeDescription(*params.Description)
+		if descriptionMessage != nil {
+			validation.add("description", descriptionMessage.text)
+		} else {
+			description = normalized
 		}
 	}
 	if len(validation.Fields) > 0 {
@@ -605,16 +615,21 @@ func (p EntryPolicy) CanModify(entry Entry) bool {
 	return *entry.UserID == p.actorID
 }
 
-func normalizeDescription(raw string) (*string, error) {
+var (
+	descriptionCharactersMessage = &validationMessage{text: "Description contains invalid characters."}
+	descriptionLengthMessage     = &validationMessage{text: "Description must be 500 characters or fewer."}
+)
+
+func normalizeDescription(raw string) (*string, *validationMessage) {
 	description := strings.TrimSpace(raw)
 	if description == "" {
 		return nil, nil
 	}
 	if !utf8.ValidString(description) || strings.IndexByte(description, 0) >= 0 {
-		return nil, errors.New("Description contains invalid characters.")
+		return nil, descriptionCharactersMessage
 	}
 	if utf8.RuneCountInString(description) > 500 {
-		return nil, errors.New("Description must be 500 characters or fewer.")
+		return nil, descriptionLengthMessage
 	}
 	return &description, nil
 }

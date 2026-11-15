@@ -285,9 +285,9 @@ func (s *Service) validateRateFields(
 		}
 	}
 
-	rate, rateErr := canonicalRate(rateRaw)
-	if rateErr != nil {
-		validation.add("rate", rateErr.Error())
+	rate, rateMessage := canonicalRate(rateRaw)
+	if rateMessage != nil {
+		validation.add("rate", rateMessage.text)
 	}
 	if rateDate.IsZero() {
 		validation.add("rate_date", "Enter a valid rate date.")
@@ -303,20 +303,26 @@ func (s *Service) validateRateFields(
 	return from, to, rate, rateDate, isMonthly, nil, nil
 }
 
-func canonicalRate(raw string) (string, error) {
+var (
+	positiveRateMessage = &validationMessage{text: "Enter a positive rate with at most 8 decimal places."}
+	rateScaleMessage    = &validationMessage{text: "Enter a rate with at most 8 decimal places."}
+	largeRateMessage    = &validationMessage{text: "Enter a smaller rate."}
+)
+
+func canonicalRate(raw string) (string, *validationMessage) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "", errors.New("Enter a positive rate with at most 8 decimal places.")
+		return "", positiveRateMessage
 	}
 	parsed, err := decimal.NewFromString(value)
 	if err != nil || !parsed.IsPositive() {
-		return "", errors.New("Enter a positive rate with at most 8 decimal places.")
+		return "", positiveRateMessage
 	}
 	if parsed.Exponent() < -8 {
-		return "", errors.New("Enter a rate with at most 8 decimal places.")
+		return "", rateScaleMessage
 	}
 	if parsed.Cmp(decimal.NewFromInt(10_000_000_000)) >= 0 {
-		return "", errors.New("Enter a smaller rate.")
+		return "", largeRateMessage
 	}
 	return parsed.String(), nil
 }
