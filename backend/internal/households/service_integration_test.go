@@ -4,9 +4,11 @@ package households
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -32,13 +34,9 @@ func newFixture(t *testing.T) *testFixture {
 	user := registerUser(t, authService, "ada@example.com")
 	other := registerUser(t, authService, "grace@example.com")
 	household, err := service.CreateAndActivate(context.Background(), user.User.ID, user.TokenHash, "  Home  ")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
+	require.NoError(t, err, "Create() error")
 	otherHouse, err := service.CreateAndActivate(context.Background(), other.User.ID, other.TokenHash, "Other home")
-	if err != nil {
-		t.Fatalf("Create() other error = %v", err)
-	}
+	require.NoError(t, err, "Create() other error")
 
 	return &testFixture{
 		pool:       pool,
@@ -58,9 +56,7 @@ func registerUser(t *testing.T, service *auth.Service, email string) auth.Sessio
 		Email:     email,
 		Password:  "correct horse battery staple",
 	})
-	if err != nil {
-		t.Fatalf("register %s: %v", email, err)
-	}
+	require.NoError(t, err, "register %s", email)
 	return session
 }
 
@@ -68,67 +64,51 @@ func TestCreateListAndGet(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
 
-	if fixture.household.Name != "Home" {
-		t.Errorf("household name = %q, want Home", fixture.household.Name)
-	}
-	if !fixture.household.IsAdmin() {
-		t.Errorf("creator role = %q, want admin", fixture.household.Role)
-	}
+	assert.Equal(t, "Home", fixture.household.Name, "household name")
+	assert.True(t, fixture.household.IsAdmin(), "creator role = %q, want admin", fixture.household.Role)
 
 	var activeHousehold *string
 	if err := fixture.pool.QueryRow(ctx,
 		"SELECT active_household_id::text FROM sessions WHERE token_hash = $1",
 		fixture.user.TokenHash,
 	).Scan(&activeHousehold); err != nil {
-		t.Fatalf("query active household: %v", err)
+		require.NoError(t, err, "query active household")
 	}
-	if activeHousehold == nil || *activeHousehold != fixture.household.ID.String() {
-		t.Errorf("session active household = %v, want %s", activeHousehold, fixture.household.ID)
-	}
+	require.NotNil(t, activeHousehold, "session active household")
+	assert.Equal(t, fixture.household.ID.String(), *activeHousehold, "session active household")
 
 	households, err := fixture.service.List(ctx, fixture.user.User.ID)
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-	if len(households) != 1 || households[0].ID != fixture.household.ID {
-		t.Errorf("List() = %+v, want only the user's household", households)
-	}
+	require.NoError(t, err, "List() error")
+	require.Len(t, households, 1, "List() = %+v", households)
+	assert.Equal(t, fixture.household.ID, households[0].ID, "List() = %+v", households)
 
 	loaded, err := fixture.service.Get(ctx, fixture.user.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-	if loaded.ID != fixture.household.ID || !loaded.IsAdmin() {
-		t.Errorf("Get() = %+v", loaded)
-	}
+	require.NoError(t, err, "Get() error")
+	assert.Equal(t, fixture.household.ID, loaded.ID, "Get() = %+v", loaded)
+	assert.True(t, loaded.IsAdmin(), "Get() = %+v", loaded)
 
 	options, err := fixture.service.GetOptions(ctx, fixture.user.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("GetOptions() error = %v", err)
-	}
-	if options.DefaultIncomeCurrencyCode != "RSD" ||
-		options.DefaultSpendingCurrencyCode != "RSD" ||
-		options.DefaultDisplayCurrencyCode != "RSD" {
-		t.Errorf("default options = %+v, want RSD", options)
-	}
+	require.NoError(t, err, "GetOptions() error")
+	assert.Equal(t, "RSD", options.DefaultIncomeCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, "RSD", options.DefaultSpendingCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, "RSD", options.DefaultDisplayCurrencyCode, "default options = %+v", options)
 }
 
 func TestCrossHouseholdAccessIsNotFound(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
 
-	if _, err := fixture.service.Get(ctx, fixture.user.User.ID, fixture.otherHouse.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("Get() other household error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.Rename(ctx, fixture.user.User.ID, fixture.otherHouse.ID, "Hijacked"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("Rename() other household error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.Members(ctx, fixture.user.User.ID, fixture.otherHouse.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("Members() other household error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.GetOptions(ctx, fixture.user.User.ID, fixture.otherHouse.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("GetOptions() other household error = %v, want ErrNotFound", err)
-	}
+	_, err := fixture.service.Get(ctx, fixture.user.User.ID, fixture.otherHouse.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "Get() other household")
+
+	_, err = fixture.service.Rename(ctx, fixture.user.User.ID, fixture.otherHouse.ID, "Hijacked")
+	assert.ErrorIs(t, err, ErrNotFound, "Rename() other household")
+
+	_, err = fixture.service.Members(ctx, fixture.user.User.ID, fixture.otherHouse.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "Members() other household")
+
+	_, err = fixture.service.GetOptions(ctx, fixture.user.User.ID, fixture.otherHouse.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "GetOptions() other household")
 }
 
 func TestMemberCannotAdministerHousehold(t *testing.T) {
@@ -140,34 +120,24 @@ func TestMemberCannotAdministerHousehold(t *testing.T) {
 		VALUES ($1, $2, 'member')`,
 		fixture.household.ID, fixture.otherUser.User.ID,
 	); err != nil {
-		t.Fatalf("insert member membership: %v", err)
+		require.NoError(t, err, "insert member membership")
 	}
 
 	memberHousehold, err := fixture.service.Get(ctx, fixture.otherUser.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("member Get() error = %v", err)
-	}
-	if memberHousehold.Role != RoleMember {
-		t.Errorf("role = %q, want member", memberHousehold.Role)
-	}
+	require.NoError(t, err, "member Get() error")
+	assert.Equal(t, RoleMember, memberHousehold.Role, "role")
 
-	if _, err := fixture.service.Rename(ctx, fixture.otherUser.User.ID, fixture.household.ID, "Renamed"); !errors.Is(err, ErrForbidden) {
-		t.Errorf("member Rename() error = %v, want ErrForbidden", err)
-	}
-	if _, err := fixture.service.Members(ctx, fixture.otherUser.User.ID, fixture.household.ID); !errors.Is(err, ErrForbidden) {
-		t.Errorf("member Members() error = %v, want ErrForbidden", err)
-	}
+	_, err = fixture.service.Rename(ctx, fixture.otherUser.User.ID, fixture.household.ID, "Renamed")
+	assert.ErrorIs(t, err, ErrForbidden, "member Rename()")
+
+	_, err = fixture.service.Members(ctx, fixture.otherUser.User.ID, fixture.household.ID)
+	assert.ErrorIs(t, err, ErrForbidden, "member Members()")
 
 	members, err := fixture.service.Members(ctx, fixture.user.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("admin Members() error = %v", err)
-	}
-	if len(members) != 2 {
-		t.Fatalf("member count = %d, want 2", len(members))
-	}
-	if members[0].Email == "" || members[1].Email == "" {
-		t.Error("member emails are empty")
-	}
+	require.NoError(t, err, "admin Members() error")
+	require.Len(t, members, 2, "member count")
+	assert.NotEmpty(t, members[0].Email, "member emails")
+	assert.NotEmpty(t, members[1].Email, "member emails")
 }
 
 func TestAdminCanRename(t *testing.T) {
@@ -175,12 +145,8 @@ func TestAdminCanRename(t *testing.T) {
 	ctx := context.Background()
 
 	renamed, err := fixture.service.Rename(ctx, fixture.user.User.ID, fixture.household.ID, "  New name ")
-	if err != nil {
-		t.Fatalf("Rename() error = %v", err)
-	}
-	if renamed.Name != "New name" {
-		t.Errorf("name = %q, want New name", renamed.Name)
-	}
+	require.NoError(t, err, "Rename() error")
+	assert.Equal(t, "New name", renamed.Name, "name")
 }
 
 func TestNameValidation(t *testing.T) {
@@ -189,14 +155,9 @@ func TestNameValidation(t *testing.T) {
 
 	for _, name := range []string{"", "   ", strings.Repeat("x", 101), "bad\nname"} {
 		_, err := fixture.service.CreateAndActivate(ctx, fixture.user.User.ID, fixture.user.TokenHash, name)
-		if err == nil {
-			t.Errorf("Create(%q) error = nil, want validation error", name)
-			continue
-		}
+		require.Error(t, err, "Create(%q)", name)
 		var validation *ValidationError
-		if !errors.As(err, &validation) {
-			t.Errorf("Create(%q) error = %T, want ValidationError", name, err)
-		}
+		assert.ErrorAs(t, err, &validation, "Create(%q)", name)
 	}
 }
 
@@ -204,44 +165,34 @@ func TestCreateAndActivateRollsBackOnActivationFailure(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
 
-	if _, err := fixture.service.CreateAndActivate(ctx,
+	_, err := fixture.service.CreateAndActivate(ctx,
 		fixture.user.User.ID, strings.Repeat("ab", 32), "Orphan",
-	); !errors.Is(err, auth.ErrSessionNotFound) {
-		t.Fatalf("CreateAndActivate() invalid session error = %v, want ErrSessionNotFound", err)
-	}
+	)
+	require.ErrorIs(t, err, auth.ErrSessionNotFound, "CreateAndActivate() invalid session")
 	assertHouseholdCount(t, ctx, fixture.pool, "Orphan", 0)
 
 	created, err := fixture.service.CreateAndActivate(ctx,
 		fixture.user.User.ID, fixture.user.TokenHash, "Orphan",
 	)
-	if err != nil {
-		t.Fatalf("CreateAndActivate() retry error = %v", err)
-	}
+	require.NoError(t, err, "CreateAndActivate() retry error")
 	assertHouseholdCount(t, ctx, fixture.pool, "Orphan", 1)
 
-	if _, err := fixture.service.CreateAndActivate(ctx,
+	_, err = fixture.service.CreateAndActivate(ctx,
 		fixture.otherUser.User.ID, fixture.user.TokenHash, "Mismatch",
-	); !errors.Is(err, auth.ErrSessionNotFound) {
-		t.Errorf("CreateAndActivate() cross-user error = %v, want ErrSessionNotFound", err)
-	}
+	)
+	assert.ErrorIs(t, err, auth.ErrSessionNotFound, "CreateAndActivate() cross-user")
 	assertHouseholdCount(t, ctx, fixture.pool, "Mismatch", 0)
 
 	loaded, err := fixture.service.Get(ctx, fixture.user.User.ID, created.ID)
-	if err != nil {
-		t.Fatalf("Get() created household error = %v", err)
-	}
-	if !loaded.IsAdmin() {
-		t.Errorf("creator role = %q, want admin", loaded.Role)
-	}
+	require.NoError(t, err, "Get() created household error")
+	assert.True(t, loaded.IsAdmin(), "creator role = %q, want admin", loaded.Role)
 }
 
 func assertHouseholdCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string, want int) {
 	t.Helper()
 	var count int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM households WHERE name = $1", name).Scan(&count); err != nil {
-		t.Fatalf("count households named %q: %v", name, err)
+		require.NoError(t, err, "count households named %q", name)
 	}
-	if count != want {
-		t.Errorf("households named %q = %d, want %d", name, count, want)
-	}
+	assert.Equal(t, want, count, "households named %q", name)
 }

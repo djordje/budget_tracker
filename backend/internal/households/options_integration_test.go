@@ -4,10 +4,11 @@ package households
 
 import (
 	"context"
-	"errors"
-	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
@@ -15,47 +16,31 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 	ctx := context.Background()
 
 	effective, err := fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("EffectiveOptions() error = %v", err)
-	}
-	if effective.DefaultIncomeCurrencyCode != "RSD" || effective.DefaultDisplayCurrencyCode != "RSD" {
-		t.Errorf("default effective options = %+v", effective)
-	}
+	require.NoError(t, err, "EffectiveOptions() error")
+	assert.Equal(t, "RSD", effective.DefaultIncomeCurrencyCode, "default effective options = %+v", effective)
+	assert.Equal(t, "RSD", effective.DefaultDisplayCurrencyCode, "default effective options = %+v", effective)
 
 	income := "EUR"
 	view, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode: &income,
 	})
-	if err != nil {
-		t.Fatalf("SetUserOptions() error = %v", err)
-	}
-	if view.User.DefaultIncomeCurrencyCode == nil || *view.User.DefaultIncomeCurrencyCode != "EUR" {
-		t.Errorf("user options = %+v", view.User)
-	}
-	if view.Effective.DefaultIncomeCurrencyCode != "EUR" ||
-		view.Effective.DefaultSpendingCurrencyCode != "RSD" ||
-		view.Household.DefaultSpendingCurrencyCode != "RSD" {
-		t.Errorf("update view = %+v, want committed overrides and inherited defaults", view)
-	}
+	require.NoError(t, err, "SetUserOptions() error")
+	require.NotNil(t, view.User.DefaultIncomeCurrencyCode, "user options = %+v", view.User)
+	assert.Equal(t, "EUR", *view.User.DefaultIncomeCurrencyCode, "user options = %+v", view.User)
+	assert.Equal(t, "EUR", view.Effective.DefaultIncomeCurrencyCode, "update view = %+v", view)
+	assert.Equal(t, "RSD", view.Effective.DefaultSpendingCurrencyCode, "update view = %+v", view)
+	assert.Equal(t, "RSD", view.Household.DefaultSpendingCurrencyCode, "update view = %+v", view)
 
 	stored, err := fixture.service.GetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("GetUserOptions() error = %v", err)
-	}
-	if stored.DefaultIncomeCurrencyCode == nil || *stored.DefaultIncomeCurrencyCode != "EUR" {
-		t.Errorf("stored options = %+v", stored)
-	}
-	if stored.DefaultSpendingCurrencyCode != nil {
-		t.Errorf("spending override = %v, want nil", stored.DefaultSpendingCurrencyCode)
-	}
+	require.NoError(t, err, "GetUserOptions() error")
+	require.NotNil(t, stored.DefaultIncomeCurrencyCode, "stored options = %+v", stored)
+	assert.Equal(t, "EUR", *stored.DefaultIncomeCurrencyCode, "stored options = %+v", stored)
+	assert.Nil(t, stored.DefaultSpendingCurrencyCode, "spending override")
 
 	effective, err = fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("EffectiveOptions() with override error = %v", err)
-	}
-	if effective.DefaultIncomeCurrencyCode != "EUR" || effective.DefaultSpendingCurrencyCode != "RSD" {
-		t.Errorf("effective options = %+v, want income override and spending inherit", effective)
-	}
+	require.NoError(t, err, "EffectiveOptions() with override error")
+	assert.Equal(t, "EUR", effective.DefaultIncomeCurrencyCode, "effective options = %+v", effective)
+	assert.Equal(t, "RSD", effective.DefaultSpendingCurrencyCode, "effective options = %+v", effective)
 
 	display := "USD"
 	if _, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
@@ -63,41 +48,30 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 		DefaultSpendingCurrencyCode: &display,
 		DefaultDisplayCurrencyCode:  &display,
 	}); err != nil {
-		t.Fatalf("SetUserOptions() full error = %v", err)
+		require.NoError(t, err, "SetUserOptions() full")
 	}
 	effective, _ = fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	if effective.DefaultDisplayCurrencyCode != "USD" || effective.DefaultSpendingCurrencyCode != "USD" {
-		t.Errorf("full effective options = %+v", effective)
-	}
+	assert.Equal(t, "USD", effective.DefaultDisplayCurrencyCode, "full effective options = %+v", effective)
+	assert.Equal(t, "USD", effective.DefaultSpendingCurrencyCode, "full effective options = %+v", effective)
 
-	if _, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
+	_, err = fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode: ptr("XXX"),
-	}); err == nil {
-		t.Error("invalid override error = nil")
-	} else {
-		var validation *OptionsValidationError
-		if !errors.As(err, &validation) || validation.Fields["default_income_currency_code"] == "" {
-			t.Errorf("validation error = %v", err)
-		}
-	}
+	})
+	require.Error(t, err, "invalid override")
+	var validation *OptionsValidationError
+	require.ErrorAs(t, err, &validation, "validation error")
+	assert.NotEmpty(t, validation.Fields["default_income_currency_code"], "validation error = %v", err)
 
 	empty := ""
 	cleared, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode: &empty,
 	})
-	if err != nil {
-		t.Fatalf("clear override error = %v", err)
-	}
-	if cleared.User.DefaultIncomeCurrencyCode != nil {
-		t.Errorf("cleared override = %v", cleared.User.DefaultIncomeCurrencyCode)
-	}
-	if cleared.Effective.DefaultIncomeCurrencyCode != "RSD" {
-		t.Errorf("cleared effective income = %q, want inherited RSD", cleared.Effective.DefaultIncomeCurrencyCode)
-	}
+	require.NoError(t, err, "clear override error")
+	assert.Nil(t, cleared.User.DefaultIncomeCurrencyCode, "cleared override")
+	assert.Equal(t, "RSD", cleared.Effective.DefaultIncomeCurrencyCode, "cleared effective income")
 
-	if _, err := fixture.service.GetUserOptions(ctx, fixture.outsider.User.ID, fixture.household.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider GetUserOptions error = %v, want ErrNotFound", err)
-	}
+	_, err = fixture.service.GetUserOptions(ctx, fixture.outsider.User.ID, fixture.household.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "outsider GetUserOptions()")
 }
 
 func TestHouseholdOptionsUpdateAuthorization(t *testing.T) {
@@ -107,36 +81,27 @@ func TestHouseholdOptionsUpdateAuthorization(t *testing.T) {
 	updated, err := fixture.service.UpdateOptions(ctx, fixture.admin.User.ID, fixture.household.ID, UpdateOptionsParams{
 		DefaultIncomeCurrencyCode: "EUR", DefaultSpendingCurrencyCode: "USD", DefaultDisplayCurrencyCode: "EUR",
 	})
-	if err != nil {
-		t.Fatalf("UpdateOptions() error = %v", err)
-	}
-	if updated.DefaultIncomeCurrencyCode != "EUR" || updated.DefaultDisplayCurrencyCode != "EUR" {
-		t.Errorf("updated options = %+v", updated)
-	}
+	require.NoError(t, err, "UpdateOptions() error")
+	assert.Equal(t, "EUR", updated.DefaultIncomeCurrencyCode, "updated options = %+v", updated)
+	assert.Equal(t, "EUR", updated.DefaultDisplayCurrencyCode, "updated options = %+v", updated)
 
 	effective, err := fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("member EffectiveOptions() error = %v", err)
-	}
-	if effective.DefaultIncomeCurrencyCode != "EUR" || effective.DefaultSpendingCurrencyCode != "USD" {
-		t.Errorf("member inherited options = %+v", effective)
-	}
+	require.NoError(t, err, "member EffectiveOptions() error")
+	assert.Equal(t, "EUR", effective.DefaultIncomeCurrencyCode, "member inherited options = %+v", effective)
+	assert.Equal(t, "USD", effective.DefaultSpendingCurrencyCode, "member inherited options = %+v", effective)
 
-	if _, err := fixture.service.UpdateOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateOptionsParams{
+	_, err = fixture.service.UpdateOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateOptionsParams{
 		DefaultIncomeCurrencyCode: "RSD", DefaultSpendingCurrencyCode: "RSD", DefaultDisplayCurrencyCode: "RSD",
-	}); !errors.Is(err, ErrForbidden) {
-		t.Errorf("member UpdateOptions error = %v, want ErrForbidden", err)
-	}
-	if _, err := fixture.service.UpdateOptions(ctx, fixture.outsider.User.ID, fixture.household.ID, UpdateOptionsParams{
+	})
+	assert.ErrorIs(t, err, ErrForbidden, "member UpdateOptions()")
+	_, err = fixture.service.UpdateOptions(ctx, fixture.outsider.User.ID, fixture.household.ID, UpdateOptionsParams{
 		DefaultIncomeCurrencyCode: "RSD", DefaultSpendingCurrencyCode: "RSD", DefaultDisplayCurrencyCode: "RSD",
-	}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider UpdateOptions error = %v, want ErrNotFound", err)
-	}
-	if _, err := fixture.service.UpdateOptions(ctx, fixture.admin.User.ID, fixture.household.ID, UpdateOptionsParams{
+	})
+	assert.ErrorIs(t, err, ErrNotFound, "outsider UpdateOptions()")
+	_, err = fixture.service.UpdateOptions(ctx, fixture.admin.User.ID, fixture.household.ID, UpdateOptionsParams{
 		DefaultIncomeCurrencyCode: "XXX", DefaultSpendingCurrencyCode: "RSD", DefaultDisplayCurrencyCode: "RSD",
-	}); err == nil {
-		t.Error("invalid household currency error = nil")
-	}
+	})
+	assert.Error(t, err, "invalid household currency")
 }
 
 func ptr(value string) *string { return &value }
@@ -150,43 +115,29 @@ func TestOptionsViewIsConsistent(t *testing.T) {
 		DefaultSpendingCurrencyCode: "USD",
 		DefaultDisplayCurrencyCode:  "EUR",
 	}); err != nil {
-		t.Fatalf("UpdateOptions() error = %v", err)
+		require.NoError(t, err, "UpdateOptions()")
 	}
 	income := "GBP"
 	view, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode: &income,
 	})
-	if err != nil {
-		t.Fatalf("SetUserOptions() error = %v", err)
-	}
+	require.NoError(t, err, "SetUserOptions() error")
 
-	if view.Household.DefaultIncomeCurrencyCode != "EUR" ||
-		view.Household.DefaultSpendingCurrencyCode != "USD" {
-		t.Errorf("household defaults = %+v", view.Household)
-	}
-	if view.User.DefaultIncomeCurrencyCode == nil || *view.User.DefaultIncomeCurrencyCode != "GBP" {
-		t.Errorf("personal overrides = %+v", view.User)
-	}
-	if view.User.DefaultSpendingCurrencyCode != nil {
-		t.Errorf("spending override = %v, want nil", view.User.DefaultSpendingCurrencyCode)
-	}
-	if view.Effective.DefaultIncomeCurrencyCode != "GBP" ||
-		view.Effective.DefaultSpendingCurrencyCode != "USD" ||
-		view.Effective.DefaultDisplayCurrencyCode != "EUR" {
-		t.Errorf("effective options = %+v", view.Effective)
-	}
+	assert.Equal(t, "EUR", view.Household.DefaultIncomeCurrencyCode, "household defaults = %+v", view.Household)
+	assert.Equal(t, "USD", view.Household.DefaultSpendingCurrencyCode, "household defaults = %+v", view.Household)
+	require.NotNil(t, view.User.DefaultIncomeCurrencyCode, "personal overrides = %+v", view.User)
+	assert.Equal(t, "GBP", *view.User.DefaultIncomeCurrencyCode, "personal overrides = %+v", view.User)
+	assert.Nil(t, view.User.DefaultSpendingCurrencyCode, "spending override")
+	assert.Equal(t, "GBP", view.Effective.DefaultIncomeCurrencyCode, "effective options = %+v", view.Effective)
+	assert.Equal(t, "USD", view.Effective.DefaultSpendingCurrencyCode, "effective options = %+v", view.Effective)
+	assert.Equal(t, "EUR", view.Effective.DefaultDisplayCurrencyCode, "effective options = %+v", view.Effective)
 
 	reloaded, err := fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
-	if err != nil {
-		t.Fatalf("GetOptionsView() error = %v", err)
-	}
-	if !reflect.DeepEqual(view, reloaded) {
-		t.Errorf("update response = %+v, stored view = %+v", view, reloaded)
-	}
+	require.NoError(t, err, "GetOptionsView() error")
+	assert.Equal(t, view, reloaded, "reloaded view")
 
-	if _, err := fixture.service.GetOptionsView(ctx, fixture.outsider.User.ID, fixture.household.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("outsider GetOptionsView error = %v, want ErrNotFound", err)
-	}
+	_, err = fixture.service.GetOptionsView(ctx, fixture.outsider.User.ID, fixture.household.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "outsider GetOptionsView()")
 }
 
 func TestOptionsViewConcurrentUpdatesStayConsistent(t *testing.T) {
@@ -203,7 +154,7 @@ func TestOptionsViewConcurrentUpdatesStayConsistent(t *testing.T) {
 			if _, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 				DefaultIncomeCurrencyCode: &code,
 			}); err != nil {
-				t.Errorf("SetUserOptions() error = %v", err)
+				assert.NoError(t, err, "SetUserOptions()")
 				return
 			}
 		}
@@ -216,7 +167,7 @@ func TestOptionsViewConcurrentUpdatesStayConsistent(t *testing.T) {
 			for range 30 {
 				view, err := fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
 				if err != nil {
-					t.Errorf("GetOptionsView() error = %v", err)
+					assert.NoError(t, err, "GetOptionsView()")
 					return
 				}
 				assertEffective := func(user *string, household, effective string) {
@@ -224,9 +175,7 @@ func TestOptionsViewConcurrentUpdatesStayConsistent(t *testing.T) {
 					if user != nil {
 						want = *user
 					}
-					if effective != want {
-						t.Errorf("effective = %q, want %q from user %v and household %q", effective, want, user, household)
-					}
+					assert.Equal(t, want, effective, "effective from user %v and household %q", user, household)
 				}
 				assertEffective(view.User.DefaultIncomeCurrencyCode, view.Household.DefaultIncomeCurrencyCode, view.Effective.DefaultIncomeCurrencyCode)
 				assertEffective(view.User.DefaultSpendingCurrencyCode, view.Household.DefaultSpendingCurrencyCode, view.Effective.DefaultSpendingCurrencyCode)
