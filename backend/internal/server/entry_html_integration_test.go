@@ -318,7 +318,7 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"csrf_token": {csrf},
 	})
 	body = readBody(t, response)
-	require.Equal(t, http.StatusNotFound, response.StatusCode, "HTMX delete missing; body = %q", body)
+	require.Equal(t, http.StatusOK, response.StatusCode, "HTMX delete missing; body = %q", body)
 	assert.Contains(t, body, `id="entries-content"`, "delete failure fragment")
 	assert.Contains(t, body, "no longer available", "delete failure fragment")
 	assert.NotContains(t, body, "entry_deleted", "delete failure fragment advertised success")

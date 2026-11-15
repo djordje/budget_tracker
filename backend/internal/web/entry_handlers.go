@@ -462,17 +462,20 @@ func (h *Handler) renderEntryDeleteError(w http.ResponseWriter, r *http.Request,
 		pageData:  h.basePageData(r, "Entries"),
 		ReturnURL: entryListReturnURL(r, kind),
 	}
+	// HTMX only swaps successful responses, so the fragment carries the
+	// message with 200 as renderEntryForm does. Non-HTMX requests keep the
+	// real status through renderEntryError.
 	switch {
 	case errors.Is(err, finance.ErrNotFound):
 		data.Message = "That entry is no longer available."
-		h.renderFragment(w, r, "entries", "entries_error", http.StatusNotFound, data)
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusOK, data)
 	case errors.Is(err, finance.ErrForbidden):
 		data.Message = "You do not have permission to delete that entry."
-		h.renderFragment(w, r, "entries", "entries_error", http.StatusForbidden, data)
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusOK, data)
 	default:
 		h.logger.Error("delete entry failed", "path", logPath(r), "error", err)
 		data.Message = "The entry could not be deleted. Try again."
-		h.renderFragment(w, r, "entries", "entries_error", http.StatusInternalServerError, data)
+		h.renderFragment(w, r, "entries", "entries_error", http.StatusOK, data)
 	}
 }
 

@@ -83,14 +83,13 @@ func serveEntryDelete(
 
 func TestHTMXDeleteFailuresReturnErrorFragments(t *testing.T) {
 	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
-		wantText   string
+		name     string
+		err      error
+		wantText string
 	}{
-		{name: "forbidden", err: finance.ErrForbidden, wantStatus: http.StatusForbidden, wantText: "do not have permission"},
-		{name: "missing", err: finance.ErrNotFound, wantStatus: http.StatusNotFound, wantText: "no longer available"},
-		{name: "internal", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, wantText: "could not be deleted"},
+		{name: "forbidden", err: finance.ErrForbidden, wantText: "do not have permission"},
+		{name: "missing", err: finance.ErrNotFound, wantText: "no longer available"},
+		{name: "internal", err: errors.New("database unavailable"), wantText: "could not be deleted"},
 	}
 
 	for _, tt := range tests {
@@ -103,7 +102,7 @@ func TestHTMXDeleteFailuresReturnErrorFragments(t *testing.T) {
 			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, true)
 
 			assert.True(t, entries.called, "Delete() was not called")
-			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+			require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
 			body := recorder.Body.String()
 			assert.Contains(t, body, `id="entries-content"`, "body is not an entries-content fragment")
 			assert.Contains(t, body, tt.wantText)
@@ -114,16 +113,43 @@ func TestHTMXDeleteFailuresReturnErrorFragments(t *testing.T) {
 	}
 }
 
+func TestDeleteFailuresKeepRealStatusOnFullPages(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{name: "forbidden", err: finance.ErrForbidden, wantStatus: http.StatusForbidden},
+		{name: "missing", err: finance.ErrNotFound, wantStatus: http.StatusNotFound},
+		{name: "internal", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			household := households.Household{ID: uuid.New(), Name: "Home", Role: households.RoleAdmin}
+			entries := &failingDeleteEntryService{
+				err:   tt.err,
+				entry: finance.Entry{ID: 42, Kind: finance.KindSpending, HouseholdID: household.ID},
+			}
+			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, false)
+
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), "<html", "failure did not return a full page")
+		})
+	}
+}
+
 func TestDeleteRejectsEntryFromAnotherHousehold(t *testing.T) {
 	active := households.Household{ID: uuid.New(), Name: "Home", Role: households.RoleAdmin}
 	other := households.Household{ID: uuid.New(), Name: "Other", Role: households.RoleAdmin}
 	tests := []struct {
-		name     string
-		htmx     bool
-		wantText string
+		name       string
+		htmx       bool
+		wantStatus int
+		wantText   string
 	}{
-		{name: "page", wantText: "That entry is not available."},
-		{name: "fragment", htmx: true, wantText: "That entry is no longer available."},
+		{name: "page", wantStatus: http.StatusNotFound, wantText: "That entry is not available."},
+		{name: "fragment", htmx: true, wantStatus: http.StatusOK, wantText: "That entry is no longer available."},
 	}
 
 	for _, tt := range tests {
@@ -135,7 +161,7 @@ func TestDeleteRejectsEntryFromAnotherHousehold(t *testing.T) {
 			}}
 			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{active}}, entries, tt.htmx)
 
-			require.Equal(t, http.StatusNotFound, recorder.Code, "body = %s", recorder.Body.String())
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			assert.Equal(t, 0, entries.deleteCalls, "Delete() calls")
 			assert.Contains(t, recorder.Body.String(), tt.wantText)
 		})
