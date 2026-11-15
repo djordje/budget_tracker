@@ -132,20 +132,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Email:     r.FormValue("email"),
 		Password:  r.FormValue("password"),
 	}
-	// Throttle before any service call so no Argon2 work happens for a refused
-	// registration attempt.
-	if !h.registrationLimiter.TryAcquire(limitKey(r, params.Email), clientKey(r)) {
-		w.Header().Set("Retry-After", "900")
-		h.render(w, r, "register", http.StatusTooManyRequests, registerPageData{
-			pageData:  h.basePageData(r, "Create account"),
-			FirstName: params.FirstName,
-			LastName:  params.LastName,
-			Email:     params.Email,
-			Next:      safeNextPath(r.FormValue("next"), ""),
-			FormError: "Too many registration attempts. Try again in 15 minutes.",
-		})
-		return
-	}
+	// Throttle after the local form checks so a typo does not spend the
+	// registration budget, but before any service call so no Argon2 work
+	// happens for a refused attempt.
 	fieldErrors := make(map[string]string)
 	if params.Password != r.FormValue("password_confirm") {
 		fieldErrors["password_confirm"] = "Passwords do not match."
@@ -154,6 +143,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var session auth.Session
 	var err error
 	if len(fieldErrors) == 0 {
+		if !h.registrationLimiter.TryAcquire(limitKey(r, params.Email), clientKey(r)) {
+			w.Header().Set("Retry-After", "900")
+			h.render(w, r, "register", http.StatusTooManyRequests, registerPageData{
+				pageData:  h.basePageData(r, "Create account"),
+				FirstName: params.FirstName,
+				LastName:  params.LastName,
+				Email:     params.Email,
+				Next:      safeNextPath(r.FormValue("next"), ""),
+				FormError: "Too many registration attempts. Try again in 15 minutes.",
+			})
+			return
+		}
 		session, err = h.sessions.Register(r.Context(), params)
 	} else {
 		err = &auth.ValidationError{Fields: fieldErrors}

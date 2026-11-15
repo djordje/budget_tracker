@@ -11,9 +11,11 @@ const (
 	limiterMaxKeys = 10_000
 
 	// limiterMaxKeysPerAdmission bounds how many distinct attempt keys one
-	// admission key (one client IP) may create per window. Junk keys therefore
-	// cannot exhaust the shared cap and reset another client's counter.
-	limiterMaxKeysPerAdmission = 10
+	// admission key (one client IP) may create per window. Fifty leaves room
+	// for ordinary NAT and CGNAT address sharing while still bounding the work
+	// one client can cause, so junk keys cannot exhaust the shared cap and
+	// reset another client's counter.
+	limiterMaxKeysPerAdmission = 50
 
 	limiterMaintenanceInterval = time.Minute
 

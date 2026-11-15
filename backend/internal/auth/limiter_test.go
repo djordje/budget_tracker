@@ -121,3 +121,26 @@ func TestAttemptLimiterMaintenanceReclaimsExpiredKeys(t *testing.T) {
 	assert.Len(t, limiter.keys, 1, "keys after maintenance")
 	assert.Len(t, limiter.admitted, 1, "admission budgets after maintenance")
 }
+
+func TestAttemptLimiterPolicyBounds(t *testing.T) {
+	login := NewLoginLimiter()
+	assert.Equal(t, 10_000, login.maxKeys, "login key cap")
+	assert.Equal(t, 50, login.maxKeysPerAdmission, "login admission budget")
+
+	registration := NewRegistrationLimiter()
+	assert.Equal(t, login.maxKeys, registration.maxKeys, "registration key cap")
+	assert.Equal(t, login.maxKeysPerAdmission, registration.maxKeysPerAdmission, "registration admission budget")
+}
+
+func TestAttemptLimiterAdmissionBudgetRecoversAfterWindow(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
+	limiter.maxKeysPerAdmission = 1
+	limiter.maintenanceInterval = 0
+
+	require.True(t, limiter.TryAcquire("first", "client"), "first bucket")
+	require.False(t, limiter.TryAcquire("second", "client"), "admission budget was not enforced")
+
+	now = now.Add(16 * time.Minute)
+	assert.True(t, limiter.TryAcquire("second", "client"), "admission budget did not recover after the window")
+}
