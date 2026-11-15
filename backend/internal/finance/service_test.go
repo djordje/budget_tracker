@@ -82,3 +82,39 @@ func TestTodayIn(t *testing.T) {
 		})
 	}
 }
+
+func TestParseOptionalDate(t *testing.T) {
+	date := time.Date(2026, time.October, 15, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		raw     string
+		want    *time.Time
+		wantErr bool
+	}{
+		{name: "plain", raw: "2026-10-15", want: &date},
+		{name: "padded", raw: "  2026-10-15\t", want: &date},
+		{name: "empty", raw: ""},
+		{name: "whitespace only", raw: "   "},
+		{name: "malformed", raw: "15/10/2026", wantErr: true},
+		{name: "malformed with padding", raw: " not-a-date ", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseOptionalDate(tt.raw)
+
+			if tt.wantErr {
+				assert.Error(t, err, "ParseOptionalDate(%q)", tt.raw)
+				assert.Nil(t, got, "ParseOptionalDate(%q)", tt.raw)
+				return
+			}
+			require.NoError(t, err, "ParseOptionalDate(%q)", tt.raw)
+			if tt.want == nil {
+				assert.Nil(t, got, "ParseOptionalDate(%q)", tt.raw)
+				return
+			}
+			require.NotNil(t, got, "ParseOptionalDate(%q)", tt.raw)
+			assert.Equal(t, *tt.want, *got, "ParseOptionalDate(%q)", tt.raw)
+		})
+	}
+}

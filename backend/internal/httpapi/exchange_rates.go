@@ -75,7 +75,7 @@ func (h *ExchangeRateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		WriteDecodeError(w, err)
 		return
 	}
-	rateDate, err := parseOptionalDate(request.RateDate)
+	rateDate, err := finance.ParseOptionalDate(request.RateDate)
 	if err != nil {
 		WriteValidationError(w, map[string]string{"rate_date": "Use a valid date in YYYY-MM-DD format."})
 		return
@@ -119,7 +119,7 @@ func (h *ExchangeRateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	var rateDate *time.Time
 	if request.RateDate != nil {
-		parsed, err := parseOptionalDate(*request.RateDate)
+		parsed, err := finance.ParseOptionalDate(*request.RateDate)
 		if err != nil || parsed == nil {
 			WriteValidationError(w, map[string]string{"rate_date": "Use a valid date in YYYY-MM-DD format."})
 			return

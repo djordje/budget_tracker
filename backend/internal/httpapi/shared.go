@@ -3,7 +3,6 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -27,15 +26,4 @@ func entryIDFromPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-func parseOptionalDate(raw string) (*time.Time, error) {
-	if raw == "" {
-		return nil, nil
-	}
-	parsed, err := time.Parse("2006-01-02", raw)
-	if err != nil {
-		return nil, err
-	}
-	return &parsed, nil
 }

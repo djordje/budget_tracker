@@ -111,12 +111,12 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 		scope = finance.ScopeMine
 	}
 
-	from, err := parseOptionalDate(query.Get("from"))
+	from, err := finance.ParseOptionalDate(query.Get("from"))
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the start date.")
 		return
 	}
-	to, err := parseOptionalDate(query.Get("to"))
+	to, err := finance.ParseOptionalDate(query.Get("to"))
 	if err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the end date.")
 		return
@@ -545,11 +545,11 @@ func entryListReturnURL(r *http.Request, kind finance.Kind) string {
 		scope = finance.ScopeAll
 	}
 	from := r.FormValue("return_from")
-	if _, err := parseOptionalDate(from); err != nil {
+	if _, err := finance.ParseOptionalDate(from); err != nil {
 		from = ""
 	}
 	to := r.FormValue("return_to")
-	if _, err := parseOptionalDate(to); err != nil {
+	if _, err := finance.ParseOptionalDate(to); err != nil {
 		to = ""
 	}
 	page, err := parsePage(r.FormValue("return_page"))

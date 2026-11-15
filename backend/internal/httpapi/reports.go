@@ -105,7 +105,7 @@ func reportHouseholdID(w http.ResponseWriter, r *http.Request, session auth.Sess
 }
 
 func requiredReportDate(w http.ResponseWriter, raw, field string) (time.Time, bool) {
-	value, err := parseOptionalDate(strings.TrimSpace(raw))
+	value, err := finance.ParseOptionalDate(raw)
 	if err != nil || value == nil {
 		WriteValidationError(w, map[string]string{field: "Use a valid date in YYYY-MM-DD format."})
 		return time.Time{}, false

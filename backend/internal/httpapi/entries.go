@@ -64,12 +64,12 @@ func (h *EntryHandler) list(w http.ResponseWriter, r *http.Request, kind finance
 		WriteError(w, http.StatusBadRequest, "invalid_request", "Scope must be mine or all.")
 		return
 	}
-	from, err := parseOptionalDate(r.URL.Query().Get("from"))
+	from, err := finance.ParseOptionalDate(r.URL.Query().Get("from"))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid_request", "The from date must use YYYY-MM-DD.")
 		return
 	}
-	to, err := parseOptionalDate(r.URL.Query().Get("to"))
+	to, err := finance.ParseOptionalDate(r.URL.Query().Get("to"))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid_request", "The to date must use YYYY-MM-DD.")
 		return
@@ -139,7 +139,7 @@ func (h *EntryHandler) create(w http.ResponseWriter, r *http.Request, kind finan
 		WriteDecodeError(w, err)
 		return
 	}
-	entryDate, err := parseOptionalDate(request.EntryDate)
+	entryDate, err := finance.ParseOptionalDate(request.EntryDate)
 	if err != nil {
 		WriteValidationError(w, map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."})
 		return
@@ -225,7 +225,7 @@ func (h *EntryHandler) update(w http.ResponseWriter, r *http.Request, kind finan
 
 	var entryDate *time.Time
 	if request.EntryDate != nil {
-		parsed, err := parseOptionalDate(*request.EntryDate)
+		parsed, err := finance.ParseOptionalDate(*request.EntryDate)
 		if err != nil || parsed == nil {
 			WriteValidationError(w, map[string]string{"entry_date": "Use a valid date in YYYY-MM-DD format."})
 			return

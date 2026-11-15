@@ -2,8 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strings"
-	"time"
 
 	"budgettracker/internal/auth"
 )
@@ -16,16 +14,4 @@ import (
 func sessionFromContext(r *http.Request) auth.Session {
 	session, _ := auth.FromContext(r.Context())
 	return session
-}
-
-func parseOptionalDate(raw string) (*time.Time, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return nil, nil
-	}
-	parsed, err := time.Parse(entryDateLayout, value)
-	if err != nil {
-		return nil, err
-	}
-	return &parsed, nil
 }
