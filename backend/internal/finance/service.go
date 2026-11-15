@@ -44,6 +44,9 @@ func (k Kind) valid() bool {
 	return k == KindIncome || k == KindSpending
 }
 
+// table returns the entry table for a kind that passed valid. Every Service
+// method checks valid before it builds SQL, so the spending branch only serves
+// the two known kinds.
 func (k Kind) table() string {
 	if k == KindIncome {
 		return "incomes"

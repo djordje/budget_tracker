@@ -1,12 +1,15 @@
 package finance
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/google/uuid"
 )
 
 func TestNormalizeDescription(t *testing.T) {
@@ -117,4 +120,46 @@ func TestParseOptionalDate(t *testing.T) {
 			assert.Equal(t, *tt.want, *got, "ParseOptionalDate(%q)", tt.raw)
 		})
 	}
+}
+
+// TestInvalidKindRejectedBeforeQuery covers the precondition Kind.table relies
+// on: every Service entry point rejects an unknown kind before it builds SQL.
+func TestInvalidKindRejectedBeforeQuery(t *testing.T) {
+	service := NewService(nil)
+	ctx := context.Background()
+	invalid := Kind("transfer")
+
+	t.Run("create", func(t *testing.T) {
+		_, err := service.Create(ctx, CreateParams{Kind: invalid})
+
+		var validation *ValidationError
+		require.ErrorAs(t, err, &validation, "Create() error")
+		assert.Equal(t, "Unknown entry type.", validation.Fields["kind"], "kind message")
+	})
+
+	t.Run("get", func(t *testing.T) {
+		_, err := service.Get(ctx, uuid.Nil, invalid, 1)
+
+		assert.ErrorIs(t, err, ErrNotFound, "Get() error")
+	})
+
+	t.Run("update", func(t *testing.T) {
+		_, err := service.Update(ctx, UpdateParams{Kind: invalid, ID: 1})
+
+		assert.ErrorIs(t, err, ErrNotFound, "Update() error")
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		err := service.Delete(ctx, uuid.Nil, invalid, 1)
+
+		assert.ErrorIs(t, err, ErrNotFound, "Delete() error")
+	})
+
+	t.Run("list", func(t *testing.T) {
+		_, err := service.List(ctx, ListParams{Kind: invalid})
+
+		var validation *ValidationError
+		require.ErrorAs(t, err, &validation, "List() error")
+		assert.Equal(t, "Unknown entry type.", validation.Fields["kind"], "kind message")
+	})
 }
