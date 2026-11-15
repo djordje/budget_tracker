@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewUsesJSONInProduction(t *testing.T) {
@@ -14,18 +17,11 @@ func TestNewUsesJSONInProduction(t *testing.T) {
 	logger.Info("started")
 
 	var entry map[string]any
-	if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
-		t.Fatalf("log output is not JSON: %v\n%s", err, output.String())
-	}
-	if entry["service"] != "budget-tracker" {
-		t.Errorf("service = %v, want budget-tracker", entry["service"])
-	}
-	if entry["env"] != "production" {
-		t.Errorf("env = %v, want production", entry["env"])
-	}
-	if entry["msg"] != "started" {
-		t.Errorf("msg = %v, want started", entry["msg"])
-	}
+	require.NoError(t, json.Unmarshal(output.Bytes(), &entry), "log output: %s", output.String())
+
+	assert.Equal(t, "budget-tracker", entry["service"])
+	assert.Equal(t, "production", entry["env"])
+	assert.Equal(t, "started", entry["msg"])
 }
 
 func TestNewUsesTextOutsideProduction(t *testing.T) {
@@ -34,12 +30,8 @@ func TestNewUsesTextOutsideProduction(t *testing.T) {
 	logger.Info("started")
 
 	got := output.String()
-	if strings.HasPrefix(strings.TrimSpace(got), "{") {
-		t.Fatalf("log output unexpectedly is JSON: %s", got)
-	}
-	if !strings.Contains(got, "service=budget-tracker") {
-		t.Errorf("log output missing service attribute: %s", got)
-	}
+	assert.False(t, strings.HasPrefix(strings.TrimSpace(got), "{"), "log output is JSON: %s", got)
+	assert.Contains(t, got, "service=budget-tracker")
 }
 
 func TestSlogSetDefaultUsesApplicationLogger(t *testing.T) {
@@ -51,9 +43,7 @@ func TestSlogSetDefaultUsesApplicationLogger(t *testing.T) {
 	slog.SetDefault(logger)
 
 	slog.Info("fallback")
-	if !strings.Contains(output.String(), "service=budget-tracker") {
-		t.Errorf("fallback log output missing application metadata: %s", output.String())
-	}
+	assert.Contains(t, output.String(), "service=budget-tracker")
 }
 
 func TestNewHonorsLevel(t *testing.T) {
@@ -61,7 +51,5 @@ func TestNewHonorsLevel(t *testing.T) {
 	logger := New(&output, "development", slog.LevelInfo)
 	logger.Debug("hidden")
 
-	if output.Len() != 0 {
-		t.Errorf("debug log was written at info level: %s", output.String())
-	}
+	assert.Zero(t, output.Len(), "debug log output = %q", output.String())
 }
