@@ -196,10 +196,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 // Dashboard serves the authenticated application home.
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	if _, ok := auth.FromContext(r.Context()); !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
 	data, ok := h.pageDataOrError(w, r, "Dashboard")
 	if !ok {
 		return

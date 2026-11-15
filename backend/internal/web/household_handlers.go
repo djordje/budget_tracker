@@ -52,11 +52,7 @@ func (h *Handler) NewHouseholdPage(w http.ResponseWriter, r *http.Request) {
 
 // CreateHousehold creates a household and makes it active.
 func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -112,11 +108,7 @@ func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -147,11 +139,7 @@ func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
 
 // ActivateHousehold changes the session's active household.
 func (h *Handler) ActivateHousehold(w http.ResponseWriter, r *http.Request) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -185,11 +173,7 @@ func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request)
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -224,11 +208,7 @@ func (h *Handler) CreateHouseholdInvitation(w http.ResponseWriter, r *http.Reque
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -287,11 +267,7 @@ func (h *Handler) RevokeHouseholdInvitation(w http.ResponseWriter, r *http.Reque
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	invitationID, err := uuid.Parse(r.PathValue("invitationID"))
 	if err != nil {
 		h.renderSettingsError(w, r, households.ErrInvitationNotFound)
@@ -309,10 +285,7 @@ func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (househol
 	if err != nil {
 		return householdSettingsPageData{}, err
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		return householdSettingsPageData{}, auth.ErrSessionNotFound
-	}
+	session := sessionFromContext(r)
 
 	household := findHousehold(data.Households, householdID)
 	if household == nil {

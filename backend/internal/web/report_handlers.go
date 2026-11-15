@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 	"budgettracker/internal/reporting"
 )
@@ -32,11 +31,7 @@ func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/app", http.StatusSeeOther)
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 
 	query := r.URL.Query()
 	today := finance.Today()

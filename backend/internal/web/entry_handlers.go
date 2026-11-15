@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 )
@@ -205,11 +204,7 @@ func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.
 		return
 	}
 
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
 		h.internalError(w, r, err)
@@ -235,11 +230,7 @@ func (h *Handler) CreateSpending(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -294,11 +285,7 @@ func (h *Handler) EditSpendingPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) editEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	id, err := entryIDFromPath(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
@@ -352,11 +339,7 @@ func (h *Handler) UpdateSpending(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	id, err := entryIDFromPath(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")
@@ -429,11 +412,7 @@ func (h *Handler) DeleteSpending(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	id, err := entryIDFromPath(r)
 	if err != nil {
 		h.renderError(w, r, http.StatusNotFound, "Entry not found", "That entry is not available.")

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 )
@@ -31,11 +30,7 @@ func (h *Handler) PreferencesPage(w http.ResponseWriter, r *http.Request) {
 
 // UpdatePreferences saves personal currency overrides.
 func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
@@ -80,11 +75,7 @@ func (h *Handler) preferencesData(
 		http.Redirect(w, r, "/app", http.StatusSeeOther)
 		return preferencesPageData{}, false
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return preferencesPageData{}, false
-	}
+	session := sessionFromContext(r)
 
 	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {

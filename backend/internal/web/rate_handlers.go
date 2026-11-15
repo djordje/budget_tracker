@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
 )
 
@@ -68,11 +67,7 @@ func (h *Handler) CreateExchangeRate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	data, err := h.newPageData(r, "Exchange rates")
 	if err != nil {
 		h.internalError(w, r, err)
@@ -115,7 +110,7 @@ func (h *Handler) EditExchangeRatePage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/app", http.StatusSeeOther)
 		return
 	}
-	session, _ := auth.FromContext(r.Context())
+	session := sessionFromContext(r)
 	rates, err := h.rates.ListExchangeRates(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
 		h.renderRateError(w, r, err)
@@ -164,11 +159,7 @@ func (h *Handler) UpdateExchangeRate(w http.ResponseWriter, r *http.Request) {
 		h.renderRateFormError(w, r, id, values, map[string]string{"rate_date": "Use a valid date in YYYY-MM-DD format."}, "")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 
 	from := values.From
 	to := values.To
@@ -205,11 +196,7 @@ func (h *Handler) DeleteExchangeRate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Rate not found", "That exchange rate is not available.")
 		return
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
+	session := sessionFromContext(r)
 	if err := h.rates.DeleteExchangeRate(r.Context(), session.User.ID, id); err != nil {
 		h.renderRateError(w, r, err)
 		return
@@ -230,10 +217,7 @@ func (h *Handler) buildRatesPage(
 	if data.ActiveHousehold == nil {
 		return exchangeRatesPageData{}, errNoActiveHousehold
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		return exchangeRatesPageData{}, auth.ErrSessionNotFound
-	}
+	session := sessionFromContext(r)
 	rates, err := h.rates.ListExchangeRates(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
 		return exchangeRatesPageData{}, err
