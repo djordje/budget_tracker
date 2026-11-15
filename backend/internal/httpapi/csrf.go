@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -61,16 +62,24 @@ func (c *CSRF) Protect(next http.Handler) http.Handler {
 		}
 
 		if isUnsafeMethod(r.Method) {
+			// Parse explicitly so an oversized form is reported as 413 for any
+			// framing. Reading the token through PostFormValue would swallow the
+			// parser error and turn the request into a plain 403.
+			if err := r.ParseForm(); err != nil {
+				var maxBytesError *http.MaxBytesError
+				if errors.As(err, &maxBytesError) {
+					writeFormTooLarge(w, r)
+					return
+				}
+				writeCSRFFailure(w, r)
+				return
+			}
 			submitted := r.Header.Get("X-CSRF-Token")
 			if submitted == "" {
 				submitted = r.PostFormValue("csrf_token")
 			}
 			if !tokensEqual(token, submitted) {
-				if wantsJSON(r) {
-					WriteError(w, http.StatusForbidden, "csrf_failed", "The request could not be verified. Refresh the page and try again.")
-				} else {
-					http.Error(w, "the request could not be verified; refresh the page and try again", http.StatusForbidden)
-				}
+				writeCSRFFailure(w, r)
 				return
 			}
 		}
@@ -84,6 +93,26 @@ func (c *CSRF) Protect(next http.Handler) http.Handler {
 func CSRFToken(ctx context.Context) string {
 	token, _ := ctx.Value(csrfContextKey{}).(string)
 	return token
+}
+
+// writeCSRFFailure reports an unverified request in the format the request
+// expects.
+func writeCSRFFailure(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		WriteError(w, http.StatusForbidden, "csrf_failed", "The request could not be verified. Refresh the page and try again.")
+		return
+	}
+	http.Error(w, "the request could not be verified; refresh the page and try again", http.StatusForbidden)
+}
+
+// writeFormTooLarge reports a form body that exceeded its bound in the format
+// the request expects.
+func writeFormTooLarge(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		WriteError(w, http.StatusRequestEntityTooLarge, "request_too_large", "The request body is too large.")
+		return
+	}
+	http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 }
 
 func newCSRFToken() (string, error) {

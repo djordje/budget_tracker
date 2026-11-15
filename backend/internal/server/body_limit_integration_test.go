@@ -48,3 +48,28 @@ func TestOversizedJSONBodyKeepsAdapterError(t *testing.T) {
 	require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode, "error = %+v", envelope.Error)
 	assert.Equal(t, "request_too_large", envelope.Error.Code, "error code")
 }
+
+func TestChunkedOversizedHTMLFormBodyIsRejected(t *testing.T) {
+	pool := testdb.New(t)
+	client := newTestClientWithPool(t, pool)
+
+	values := registerForm(client.csrfToken(t, "/register"))
+	values.Set("email", "chunked@example.com")
+	values.Set("first_name", strings.Repeat("a", oversizedBodyBytes))
+
+	request, err := http.NewRequest(http.MethodPost, client.baseURL+"/register", strings.NewReader(values.Encode()))
+	require.NoError(t, err, "create chunked POST request")
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.ContentLength = -1
+	response, err := client.noRedirect.Do(request)
+	require.NoError(t, err, "POST /register")
+	body := readBody(t, response)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode, "body = %s", body)
+
+	var count int
+	require.NoError(t, pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM auth_credentials WHERE email_normalized = $1`, "chunked@example.com",
+	).Scan(&count), "count registered users")
+	assert.Zero(t, count, "chunked oversized form body reached the register handler")
+}
