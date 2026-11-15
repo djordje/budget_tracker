@@ -3,6 +3,9 @@ package reporting
 import (
 	"math/big"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 
 	"budgettracker/internal/finance"
@@ -29,9 +32,7 @@ func TestRateSetPrecedence(t *testing.T) {
 		testRate("USD", "RSD", "100", monthDate, true),
 	}
 	set, err := NewRateSet(rates)
-	if err != nil {
-		t.Fatalf("NewRateSet() error = %v", err)
-	}
+	require.NoError(t, err, "NewRateSet()")
 
 	tests := []struct {
 		name   string
@@ -55,15 +56,12 @@ func TestRateSetPrecedence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := set.Rate(tt.from, tt.to, tt.date)
-			if ok != tt.wantOK {
-				t.Fatalf("Rate() ok = %v, want %v", ok, tt.wantOK)
-			}
 			if !tt.wantOK {
+				assert.False(t, ok, "Rate() ok")
 				return
 			}
-			if got.RatString() != tt.want {
-				t.Errorf("Rate() = %s, want %s", got.RatString(), tt.want)
-			}
+			require.True(t, ok, "Rate() ok")
+			assert.Equal(t, tt.want, got.RatString(), "Rate()")
 		})
 	}
 }
@@ -74,18 +72,14 @@ func TestRateSetExactDirectBeatsExactInverse(t *testing.T) {
 		testRate("EUR", "USD", "1.10", date, false),
 		testRate("USD", "EUR", "0.85", date, false),
 	})
-	if err != nil {
-		t.Fatalf("NewRateSet() error = %v", err)
-	}
+	require.NoError(t, err, "NewRateSet()")
 
 	rate, ok := set.Rate("EUR", "USD", date)
-	if !ok || rate.RatString() != "11/10" {
-		t.Errorf("direct rate = %s, %v; want 11/10", rate.RatString(), ok)
-	}
+	require.True(t, ok, "Rate() ok")
+	assert.Equal(t, "11/10", rate.RatString(), "direct rate")
 	rate, ok = set.Rate("USD", "EUR", date)
-	if !ok || rate.RatString() != "17/20" {
-		t.Errorf("reverse direct rate = %s, %v; want 17/20", rate.RatString(), ok)
-	}
+	require.True(t, ok, "Rate() ok")
+	assert.Equal(t, "17/20", rate.RatString(), "reverse direct rate")
 }
 
 func TestConvertMinorRoundsHalfEven(t *testing.T) {
@@ -108,24 +102,19 @@ func TestConvertMinorRoundsHalfEven(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ConvertMinor(tt.amount, tt.fromUnits, tt.toUnits, tt.rate)
-			if err != nil {
-				t.Fatalf("ConvertMinor() error = %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("ConvertMinor() = %d, want %d", got, tt.want)
-			}
+			require.NoError(t, err, "ConvertMinor()")
+			assert.Equal(t, tt.want, got, "ConvertMinor()")
 		})
 	}
 }
 
 func TestConvertMinorRejectsInvalidInput(t *testing.T) {
-	if _, err := ConvertMinor(100, 2, 2, nil); err == nil {
-		t.Error("ConvertMinor(nil rate) error = nil")
-	}
-	if _, err := ConvertMinor(100, 2, 2, big.NewRat(0, 1)); err == nil {
-		t.Error("ConvertMinor(zero rate) error = nil")
-	}
-	if _, err := ConvertMinor(-1, 2, 2, big.NewRat(1, 1)); err == nil {
-		t.Error("ConvertMinor(negative amount) error = nil")
-	}
+	_, err := ConvertMinor(100, 2, 2, nil)
+	assert.Error(t, err, "ConvertMinor(nil rate)")
+
+	_, err = ConvertMinor(100, 2, 2, big.NewRat(0, 1))
+	assert.Error(t, err, "ConvertMinor(zero rate)")
+
+	_, err = ConvertMinor(-1, 2, 2, big.NewRat(1, 1))
+	assert.Error(t, err, "ConvertMinor(negative amount)")
 }
