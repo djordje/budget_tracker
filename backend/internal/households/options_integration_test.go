@@ -15,10 +15,10 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 	fixture := newInvitationFixture(t)
 	ctx := context.Background()
 
-	effective, err := fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	require.NoError(t, err, "EffectiveOptions() error")
-	assert.Equal(t, "RSD", effective.DefaultIncomeCurrencyCode, "default effective options = %+v", effective)
-	assert.Equal(t, "RSD", effective.DefaultDisplayCurrencyCode, "default effective options = %+v", effective)
+	first, err := fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
+	require.NoError(t, err, "GetOptionsView() error")
+	assert.Equal(t, "RSD", first.Effective.DefaultIncomeCurrencyCode, "default effective options = %+v", first)
+	assert.Equal(t, "RSD", first.Effective.DefaultDisplayCurrencyCode, "default effective options = %+v", first)
 
 	income := "EUR"
 	view, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
@@ -31,16 +31,13 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 	assert.Equal(t, "RSD", view.Effective.DefaultSpendingCurrencyCode, "update view = %+v", view)
 	assert.Equal(t, "RSD", view.Household.DefaultSpendingCurrencyCode, "update view = %+v", view)
 
-	stored, err := fixture.service.GetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	require.NoError(t, err, "GetUserOptions() error")
-	require.NotNil(t, stored.DefaultIncomeCurrencyCode, "stored options = %+v", stored)
-	assert.Equal(t, "EUR", *stored.DefaultIncomeCurrencyCode, "stored options = %+v", stored)
-	assert.Nil(t, stored.DefaultSpendingCurrencyCode, "spending override")
-
-	effective, err = fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	require.NoError(t, err, "EffectiveOptions() with override error")
-	assert.Equal(t, "EUR", effective.DefaultIncomeCurrencyCode, "effective options = %+v", effective)
-	assert.Equal(t, "RSD", effective.DefaultSpendingCurrencyCode, "effective options = %+v", effective)
+	stored, err := fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
+	require.NoError(t, err, "GetOptionsView() error")
+	require.NotNil(t, stored.User.DefaultIncomeCurrencyCode, "stored options = %+v", stored.User)
+	assert.Equal(t, "EUR", *stored.User.DefaultIncomeCurrencyCode, "stored options = %+v", stored.User)
+	assert.Nil(t, stored.User.DefaultSpendingCurrencyCode, "spending override")
+	assert.Equal(t, "EUR", stored.Effective.DefaultIncomeCurrencyCode, "effective options = %+v", stored)
+	assert.Equal(t, "RSD", stored.Effective.DefaultSpendingCurrencyCode, "effective options = %+v", stored)
 
 	display := "USD"
 	if _, err := fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
@@ -50,9 +47,10 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 	}); err != nil {
 		require.NoError(t, err, "SetUserOptions() full")
 	}
-	effective, _ = fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	assert.Equal(t, "USD", effective.DefaultDisplayCurrencyCode, "full effective options = %+v", effective)
-	assert.Equal(t, "USD", effective.DefaultSpendingCurrencyCode, "full effective options = %+v", effective)
+	stored, err = fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
+	require.NoError(t, err, "GetOptionsView() error")
+	assert.Equal(t, "USD", stored.Effective.DefaultDisplayCurrencyCode, "full effective options = %+v", stored)
+	assert.Equal(t, "USD", stored.Effective.DefaultSpendingCurrencyCode, "full effective options = %+v", stored)
 
 	_, err = fixture.service.SetUserOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode: ptr("XXX"),
@@ -70,8 +68,8 @@ func TestHouseholdOptionsAndUserInheritance(t *testing.T) {
 	assert.Nil(t, cleared.User.DefaultIncomeCurrencyCode, "cleared override")
 	assert.Equal(t, "RSD", cleared.Effective.DefaultIncomeCurrencyCode, "cleared effective income")
 
-	_, err = fixture.service.GetUserOptions(ctx, fixture.outsider.User.ID, fixture.household.ID)
-	assert.ErrorIs(t, err, ErrNotFound, "outsider GetUserOptions()")
+	_, err = fixture.service.GetOptionsView(ctx, fixture.outsider.User.ID, fixture.household.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "outsider GetOptionsView()")
 }
 
 func TestHouseholdOptionsUpdateAuthorization(t *testing.T) {
@@ -85,10 +83,10 @@ func TestHouseholdOptionsUpdateAuthorization(t *testing.T) {
 	assert.Equal(t, "EUR", updated.DefaultIncomeCurrencyCode, "updated options = %+v", updated)
 	assert.Equal(t, "EUR", updated.DefaultDisplayCurrencyCode, "updated options = %+v", updated)
 
-	effective, err := fixture.service.EffectiveOptions(ctx, fixture.member.User.ID, fixture.household.ID)
-	require.NoError(t, err, "member EffectiveOptions() error")
-	assert.Equal(t, "EUR", effective.DefaultIncomeCurrencyCode, "member inherited options = %+v", effective)
-	assert.Equal(t, "USD", effective.DefaultSpendingCurrencyCode, "member inherited options = %+v", effective)
+	view, err := fixture.service.GetOptionsView(ctx, fixture.member.User.ID, fixture.household.ID)
+	require.NoError(t, err, "member GetOptionsView() error")
+	assert.Equal(t, "EUR", view.Effective.DefaultIncomeCurrencyCode, "member inherited options = %+v", view)
+	assert.Equal(t, "USD", view.Effective.DefaultSpendingCurrencyCode, "member inherited options = %+v", view)
 
 	_, err = fixture.service.UpdateOptions(ctx, fixture.member.User.ID, fixture.household.ID, UpdateOptionsParams{
 		DefaultIncomeCurrencyCode: "RSD", DefaultSpendingCurrencyCode: "RSD", DefaultDisplayCurrencyCode: "RSD",

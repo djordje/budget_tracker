@@ -108,24 +108,6 @@ func (s *Service) GetOptionsView(ctx context.Context, userID, householdID uuid.U
 	return s.optionsView(ctx, s.pool, userID, householdID)
 }
 
-// GetUserOptions returns personal overrides, or empty overrides when none exist.
-func (s *Service) GetUserOptions(ctx context.Context, userID, householdID uuid.UUID) (UserOptions, error) {
-	view, err := s.GetOptionsView(ctx, userID, householdID)
-	if err != nil {
-		return UserOptions{}, err
-	}
-	return view.User, nil
-}
-
-// EffectiveOptions resolves personal overrides over household defaults.
-func (s *Service) EffectiveOptions(ctx context.Context, userID, householdID uuid.UUID) (EffectiveOptions, error) {
-	view, err := s.GetOptionsView(ctx, userID, householdID)
-	if err != nil {
-		return EffectiveOptions{}, err
-	}
-	return view.Effective, nil
-}
-
 type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
