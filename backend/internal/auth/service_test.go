@@ -169,3 +169,30 @@ func TestMaybeDeleteExpiredSessionsLogsFailureWithoutFailing(t *testing.T) {
 	assert.Contains(t, logs.String(), "delete expired sessions", "cleanup failure log message")
 	assert.Contains(t, logs.String(), "database unavailable", "cleanup failure log error")
 }
+
+func TestSessionExpiryUsesClockSeam(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))
+	service := NewService(nil, nil)
+	service.now = func() time.Time { return now }
+
+	assert.Equal(t, now.UTC().Add(SessionLifetime), service.sessionExpiry(), "sessionExpiry()")
+}
+
+func TestSessionExpiredAtExpiryBoundary(t *testing.T) {
+	expiresAt := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{name: "before expiry", now: expiresAt.Add(-time.Nanosecond)},
+		{name: "at expiry", now: expiresAt, want: true},
+		{name: "after expiry", now: expiresAt.Add(time.Nanosecond), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sessionExpired(tt.now, expiresAt), "sessionExpired()")
+		})
+	}
+}

@@ -120,7 +120,7 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (Session,
 	if err != nil {
 		return Session{}, err
 	}
-	expiresAt := time.Now().UTC().Add(SessionLifetime)
+	expiresAt := s.sessionExpiry()
 
 	var session Session
 	err = store.WithTx(ctx, s.pool, func(tx pgx.Tx) error {
@@ -265,7 +265,7 @@ func (s *Service) SessionByToken(ctx context.Context, rawToken string) (Session,
 	session.User.ID = session.UserID
 	session.TokenHash = tokenHash
 
-	if !time.Now().UTC().Before(session.ExpiresAt) {
+	if sessionExpired(s.now(), session.ExpiresAt) {
 		_, _ = s.pool.Exec(ctx, "DELETE FROM sessions WHERE token_hash = $1", tokenHash)
 		return Session{}, ErrSessionNotFound
 	}
@@ -355,12 +355,23 @@ type sessionExecer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+// sessionExpiry returns the expiry for a session created now.
+func (s *Service) sessionExpiry() time.Time {
+	return s.now().UTC().Add(SessionLifetime)
+}
+
+// sessionExpired reports whether now has reached the session expiry. A session
+// is invalid from its expiry instant onward, matching the SQL cleanup.
+func sessionExpired(now, expiresAt time.Time) bool {
+	return !now.Before(expiresAt)
+}
+
 func (s *Service) createSession(ctx context.Context, user User) (Session, error) {
 	rawToken, tokenHash, err := newSessionToken()
 	if err != nil {
 		return Session{}, err
 	}
-	expiresAt := time.Now().UTC().Add(SessionLifetime)
+	expiresAt := s.sessionExpiry()
 	return insertSession(ctx, s.pool, user, rawToken, tokenHash, expiresAt)
 }
 
