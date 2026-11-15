@@ -1,6 +1,6 @@
 # Backend Review Remediation
 
-Status: In progress — approved 2026-11-15; implementation started in the milestone order below. The findings come from a full read of `backend/`; the decision log in §10 records the confirmed resolutions to the §8 questions.
+Status: Complete — approved 2026-11-15 and delivered 2026-11-15 in the milestone order below. The findings come from a full read of `backend/`; the decision log in §10 records the confirmed resolutions to the §8 questions, and §11 records delivery and validation.
 
 ## 1. Purpose and context
 
@@ -300,3 +300,50 @@ Resolved 2026-11-15 before implementation, adopting the proposal recorded in eac
 | Q5 — Membership FK delete behavior | `ON DELETE CASCADE`, documented in the migration comment, matching the current `users` cascade. No member-removal feature exists yet. |
 | Q6 — CSRF hardening | The single-host, no-sibling-subdomain assumption still holds, so S6 stays documentation-only. Revisit if deployment changes. |
 | Q7 — Y7 consolidation scope | Mechanical consolidation of validation-error and date-parsing helpers is in scope in Milestone 6, limited to helpers whose behavior is already identical. No `utils` package and no behavior change. |
+
+## 11. Delivery and validation record
+
+Delivered on `main` as eight milestones (0 through 7) in the planned order, each landing as its own green commit (formatted, linted in both build-tag modes, unit- and integration-tested, buildable). Milestone 7 closed the plan.
+
+Every gap in §4.5 is now closed by a test, and none is waived. The gaps that were covered while shipping the behavior they belonged to, rather than in Milestone 7, are T9 with Milestone 0, T6 with Milestone 1, T7 with Milestone 2, and T1/T3/T4 with Milestone 3. Milestone 7 added T2, T5, and T8 table cases, the oversized-input integration test, and the T10 coordinated snapshot test.
+
+### Validation results for Milestone 7
+
+Run on 2026-11-15 against the Compose PostgreSQL 18 instance on `localhost:5433`.
+
+| Command | Result |
+| --- | --- |
+| `mise run format:check` | clean at every Milestone 7 commit |
+| `mise run lint` | `go vet` clean in both modes; `golangci-lint` 0 issues in both modes |
+| `mise run test` | green |
+| `mise run test:integration` | green |
+| `mise run check:all` | passed: `format:check`, `lint`, `test`, `test:integration`, `build` |
+| `cd backend && golangci-lint run --default=standard --max-same-issues=0 --max-issues-per-linter=0 ./...` | 0 issues |
+| `cd backend && golangci-lint run --default=standard --max-same-issues=0 --max-issues-per-linter=0 --build-tags=integration ./...` | 0 issues |
+| `cd backend && go test -race -run 'TestAttemptLimiter\|TestRegistrationLimiter' ./internal/auth/` | green `-race` (T6 limiter behavior) |
+| `cd backend && TEST_DATABASE_URL=... go test -race -tags=integration -run 'TestSummaryReadsOneSnapshot' ./internal/reporting/` | green `-race` (T10 snapshot) |
+
+`TestSafeNextPathKeepsRedirectsOnThisOrigin` and `TestOversizedAmountLeavesNoPartialWrite`/`TestOversizedRateLeavesNoPartialWrite` ran inside the two `mise` test tasks above; `TestSummaryReadsOneSnapshot` also passed five consecutive `-count=1` runs.
+
+### T10 falsification
+
+`TestSummaryReadsOneSnapshot` holds an `ACCESS EXCLUSIVE` lock on `exchange_rates` in a writer transaction that also deletes the entry and its rate. It waits without sleeps or retries: `require.Eventually` polls `pg_stat_activity` for a backend where `wait_event_type = 'Lock'` and `pg_blocking_pids(pid)` contains the writer's backend ID, so the report's entries read is known to have finished before the commit. Cleanups roll the writer transaction back and cancel the report context so the suite cannot hang.
+
+Temporarily switching the `pgx.TxOptions` in `internal/reporting/service.go` to `ReadCommitted` made the test fail with `EntryCount:1`, `IncludedEntryCount:0`, `MissingEntryCount:1`, `IncomeMinor:0`, `Complete:false`, `MissingRates:[EUR→RSD 2026-10-15]`; reverting the throwaway edit restored green. The committed test therefore pins the `RepeatableRead` snapshot rather than an arithmetic identity that also holds under `ReadCommitted`. No isolation seam, build tag, or test-only hook was committed for it, and `TestSummaryConcurrentWritesRemainConsistent` is unchanged.
+
+### CI enforcement
+
+`.github/workflows/ci.yml` runs `mise run check:all`, which runs `lint`, which runs `golangci-lint` in plain and `integration` build-tag modes against `backend/.golangci.yml` with the explicit six-linter set. The expanded configuration is enforced by the existing workflow; no new step, tool installation, or exclusion was added.
+
+### Known remaining limitations
+
+- **C6** — `FormatAmount`/`DisplayAmount` still return `"0"` for an unsupported `minorUnits`. Milestone 7 pins that fallback in `TestUnsupportedMinorUnitsFallBackToZero` so the gap stays visible; replacing it is out of scope for this remediation.
+- **S6** — double-submit CSRF still relies on an unsigned sibling cookie. Documented only, per Q6; revisit if the deployment gains sibling subdomains.
+- **C9** — the malformed-household-ID 404 now renders the styled error page, and a failed `SetActiveHousehold` after invitation acceptance is logged at error level and redirects with its own notice instead of pretending the household is active. Report conversion overflow still aborts the summary (Q3), and `canonicalRate` still rejects scientific notation while canonicalizing exactly representable extra trailing zeros (Q4).
+
+### Delivered differently from the plan
+
+- **Y7 is partial.** All three date parsers now call `finance.ParseOptionalDate`, one parser per wire format. The validation-error types stay separate: `finance.ValidationError`, `auth.ValidationError`, and the household `ValidationError`/`OptionsValidationError` pair back different adapter contracts, so merging them would change error types rather than remove duplication. The reason is recorded in the commit that shipped the parser.
+- **I1 documents the precondition instead of changing the signature.** `Kind.table` keeps its `spendings` fallback, with the validated-kind precondition documented on the method and the guards covered by unit tests, rather than returning an error that every caller would have to handle for an unreachable case.
+- **T2 pins today's invalid-exponent behavior.** The new cases assert the `"0"` fallback rather than a rejected value, because changing it is C6's work and not this plan's.
+- **Milestone 7 commit 2 is service-level.** Oversized amounts and rates are rejected in the shared service that both adapters call with raw strings, so the integration test drives the service rather than duplicating the case in each adapter.
