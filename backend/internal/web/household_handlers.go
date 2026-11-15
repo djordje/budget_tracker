@@ -338,7 +338,7 @@ func (h *Handler) renderSettingsError(w http.ResponseWriter, r *http.Request, er
 		h.renderError(w, r, http.StatusNotFound, "Invitation not found", "That invitation is not available.")
 	case errors.Is(err, households.ErrInvitationAccepted):
 		h.renderError(w, r, http.StatusConflict, "Invitation already accepted", "That invitation is no longer pending.")
-	case errors.Is(err, households.ErrNotFound), errors.Is(err, auth.ErrSessionNotFound):
+	case errors.Is(err, households.ErrNotFound):
 		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 	case errors.Is(err, households.ErrForbidden):
 		h.renderError(w, r, http.StatusForbidden, "Not allowed", "Only household admins can manage these settings.")
