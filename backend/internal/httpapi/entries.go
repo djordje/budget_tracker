@@ -319,6 +319,10 @@ func parseOptionalInt(w http.ResponseWriter, raw, field string) (int, bool) {
 		WriteError(w, http.StatusBadRequest, "invalid_request", "The "+field+" value must be an integer.")
 		return 0, false
 	}
+	if value < 0 {
+		WriteError(w, http.StatusBadRequest, "invalid_request", "The "+field+" value cannot be negative.")
+		return 0, false
+	}
 	return value, true
 }
 

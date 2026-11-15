@@ -147,6 +147,8 @@ func TestEntryHandlerRejectsInvalidQuery(t *testing.T) {
 		{name: "to date", query: "to=2026-13-01"},
 		{name: "page", query: "page=many"},
 		{name: "page size", query: "page_size=lots"},
+		{name: "negative page", query: "page=-1"},
+		{name: "negative page size", query: "page_size=-1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,9 +160,30 @@ func TestEntryHandlerRejectsInvalidQuery(t *testing.T) {
 			}, discardLogger())
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.ListIncome,
 				httptest.NewRequest(http.MethodGet, "/api/v1/incomes?"+tt.query, nil))
-			assert.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Equal(t, http.StatusBadRequest, recorder.Code, "body = %s", recorder.Body.String())
+
+			var body ErrorResponse
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+			assert.Equal(t, "invalid_request", body.Error.Code, "error code")
 		})
 	}
+}
+
+func TestEntryHandlerTreatsZeroPaginationAsDefault(t *testing.T) {
+	var got finance.ListParams
+	handler := NewEntryHandler(stubEntryService{
+		list: func(_ context.Context, params finance.ListParams) (finance.ListResult, error) {
+			got = params
+			return finance.ListResult{Page: params.Page, PageSize: params.PageSize}, nil
+		},
+	}, discardLogger())
+
+	recorder := serveEntryRequest(t, activeEntrySession(), handler.ListIncome,
+		httptest.NewRequest(http.MethodGet, "/api/v1/incomes?page=0&page_size=0", nil))
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Zero(t, got.Page, "params = %+v", got)
+	assert.Zero(t, got.PageSize, "params = %+v", got)
 }
 
 func TestEntryHandlerMapsServiceErrors(t *testing.T) {
