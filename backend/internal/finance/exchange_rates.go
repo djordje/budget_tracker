@@ -33,15 +33,11 @@ type ExchangeRate struct {
 
 // RateString formats the stored decimal without insignificant trailing zeroes.
 func (r ExchangeRate) RateString() string {
-	whole, fraction, found := strings.Cut(r.Rate, ".")
-	if !found {
+	value, err := decimal.NewFromString(r.Rate)
+	if err != nil {
 		return r.Rate
 	}
-	fraction = strings.TrimRight(fraction, "0")
-	if fraction == "" {
-		return whole
-	}
-	return whole + "." + fraction
+	return value.String()
 }
 
 // CreateExchangeRateParams contains the input for a new rate.

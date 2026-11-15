@@ -45,3 +45,26 @@ func TestCanonicalRate(t *testing.T) {
 		})
 	}
 }
+
+func TestRateStringTrimsInsignificantZeroes(t *testing.T) {
+	tests := []struct {
+		name string
+		rate string
+		want string
+	}{
+		{name: "stored scale", rate: "1.23000000", want: "1.23"},
+		{name: "whole number", rate: "100", want: "100"},
+		{name: "one decimal", rate: "1.10000000", want: "1.1"},
+		{name: "smallest unit", rate: "0.00000001", want: "0.00000001"},
+		{name: "no fractional part", rate: "117.00000000", want: "117"},
+		{name: "unparseable falls back to raw", rate: "not-a-rate", want: "not-a-rate"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rate := ExchangeRate{Rate: tt.rate}
+
+			assert.Equal(t, tt.want, rate.RateString(), "RateString()")
+		})
+	}
+}
