@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"path"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -53,14 +54,10 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
-			path := r.URL.Path
-			if strings.HasPrefix(path, "/invitations/") {
-				path = "/invitations/[redacted]"
-			}
 			logger.Info("http request",
 				"request_id", RequestIDFromContext(r.Context()),
 				"method", r.Method,
-				"path", path,
+				"path", RedactInvitationPath(r.URL.Path),
 				"status", status,
 				"bytes", recorder.bytes,
 				"duration_ms", time.Since(start).Milliseconds(),
@@ -68,6 +65,18 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			)
 		})
 	}
+}
+
+// RedactInvitationPath returns the request path with any invitation token
+// removed. It cleans the path first because the mux routes a cleaned copy, so a
+// request such as /x/../invitations/<token> still reaches the invitation
+// handler. Directory paths without a token are left unchanged.
+func RedactInvitationPath(rawPath string) string {
+	cleaned := path.Clean(rawPath)
+	if cleaned == "/invitations" || !strings.HasPrefix(cleaned, "/invitations/") {
+		return rawPath
+	}
+	return "/invitations/[redacted]"
 }
 
 // Recoverer turns a handler panic into a logged response. Before the response

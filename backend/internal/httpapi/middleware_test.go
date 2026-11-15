@@ -98,15 +98,35 @@ func TestRecovererAfterCommitAppendsNothing(t *testing.T) {
 	assert.Contains(t, output.String(), "panic recovered", "log output missing panic message")
 }
 
-func TestRequestLoggerRedactsInvitationToken(t *testing.T) {
-	var output strings.Builder
-	logger := slog.New(slog.NewJSONHandler(&output, nil))
-	handler := RequestID(RequestLogger(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+func TestRequestLoggerRedactsInvitationTokens(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "canonical", path: "/invitations/secret-token", want: "/invitations/[redacted]"},
+		{name: "parent segment", path: "/x/../invitations/secret-token", want: "/invitations/[redacted]"},
+		{name: "double slash", path: "//invitations/secret-token", want: "/invitations/[redacted]"},
+		{name: "dot segment", path: "/invitations/./secret-token", want: "/invitations/[redacted]"},
+		{name: "directory", path: "/invitations/", want: "/invitations/"},
+		{name: "plain directory", path: "/invitations", want: "/invitations"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output strings.Builder
+			logger := slog.New(slog.NewJSONHandler(&output, nil))
+			handler := RequestID(RequestLogger(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
 
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/invitations/secret-token", nil))
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.URL.Path = tt.path
+			handler.ServeHTTP(httptest.NewRecorder(), request)
 
-	assert.NotContains(t, output.String(), "secret-token", "invitation token was logged")
-	assert.Contains(t, output.String(), "/invitations/[redacted]", "redacted path missing")
+			assert.NotContains(t, output.String(), "secret-token", "invitation token was logged")
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal([]byte(output.String()), &entry), "log output: %s", output.String())
+			assert.Equal(t, tt.want, entry["path"], "logged path")
+		})
+	}
 }
 
 func TestLimitHTMLFormBodyRejectsOversizedForms(t *testing.T) {

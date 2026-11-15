@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -193,10 +192,7 @@ func (h *Handler) internalError(w http.ResponseWriter, r *http.Request, err erro
 }
 
 // logPath returns the request path for logging with invitation tokens removed,
-// mirroring the redaction in httpapi.RequestLogger.
+// delegating to the same redaction the HTTP request logger uses.
 func logPath(r *http.Request) string {
-	if strings.HasPrefix(r.URL.Path, "/invitations/") {
-		return "/invitations/[redacted]"
-	}
-	return r.URL.Path
+	return httpapi.RedactInvitationPath(r.URL.Path)
 }

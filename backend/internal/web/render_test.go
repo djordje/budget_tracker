@@ -49,12 +49,17 @@ func TestLogPathRedactsInvitationTokens(t *testing.T) {
 		want string
 	}{
 		{path: "/invitations/secret-token", want: "/invitations/[redacted]"},
-		{path: "/invitations/", want: "/invitations/[redacted]"},
+		{path: "/x/../invitations/secret-token", want: "/invitations/[redacted]"},
+		{path: "//invitations/secret-token", want: "/invitations/[redacted]"},
+		{path: "/invitations/./secret-token", want: "/invitations/[redacted]"},
+		{path: "/invitations/", want: "/invitations/"},
+		{path: "/invitations", want: "/invitations"},
 		{path: "/app/invitations/secret-token", want: "/app/invitations/secret-token"},
 		{path: "/app/entries", want: "/app/entries"},
 	}
 	for _, tt := range tests {
-		request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.URL.Path = tt.path
 		assert.Equal(t, tt.want, logPath(request), "logPath(%q)", tt.path)
 	}
 }
