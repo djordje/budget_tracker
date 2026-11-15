@@ -631,7 +631,7 @@ func parsePage(raw string) (int, error) {
 		return 1, nil
 	}
 	value, err := strconv.Atoi(raw)
-	if err != nil || value < 1 {
+	if err != nil || value < 0 {
 		return 0, errors.New("invalid page")
 	}
 	return value, nil

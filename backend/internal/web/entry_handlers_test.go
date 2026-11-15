@@ -142,6 +142,33 @@ func TestDeleteRejectsEntryFromAnotherHousehold(t *testing.T) {
 	}
 }
 
+func TestParsePageMatchesTheJSONAdapter(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    int
+		wantErr bool
+	}{
+		{name: "empty uses default", raw: "", want: 1},
+		{name: "zero uses default", raw: "0", want: 0},
+		{name: "first page", raw: "1", want: 1},
+		{name: "negative", raw: "-1", wantErr: true},
+		{name: "non-numeric", raw: "abc", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parsePage(tt.raw)
+
+			if tt.wantErr {
+				assert.Error(t, err, "parsePage(%q)", tt.raw)
+				return
+			}
+			require.NoError(t, err, "parsePage(%q)", tt.raw)
+			assert.Equal(t, tt.want, got, "parsePage(%q)", tt.raw)
+		})
+	}
+}
+
 func TestNewEntryFormDefaultsToUTCDate(t *testing.T) {
 	before := finance.Today()
 	recorder := serveHouseholdPage(t, func(h *Handler) http.HandlerFunc { return h.NewIncomePage })
