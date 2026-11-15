@@ -102,7 +102,7 @@ func TestDecodeJSONErrorResponsesAreSafeJSON(t *testing.T) {
 		Name string `json:"name"`
 	}
 
-	err := decodeJSON(recorder, request, &destination)
+	err := decodeJSON(request, &destination)
 	require.Error(t, err, "decodeJSON()")
 	WriteDecodeError(recorder, err)
 
@@ -125,7 +125,7 @@ func decodeAndRespond(t *testing.T, contentType, body string) (int, string, stri
 	var destination struct {
 		Name string `json:"name"`
 	}
-	err := decodeJSON(recorder, request, &destination)
+	err := decodeJSON(request, &destination)
 	if err == nil {
 		return 0, "", ""
 	}

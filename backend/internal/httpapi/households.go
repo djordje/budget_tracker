@@ -72,7 +72,7 @@ func (h *HouseholdHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request createHouseholdRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}

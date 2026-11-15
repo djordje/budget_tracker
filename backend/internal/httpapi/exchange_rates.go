@@ -71,7 +71,7 @@ func (h *ExchangeRateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request exchangeRateCreateRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}
@@ -113,7 +113,7 @@ func (h *ExchangeRateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request exchangeRateUpdateRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}

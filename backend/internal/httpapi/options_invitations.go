@@ -22,7 +22,7 @@ func (h *HouseholdHandler) UpdateOptions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var request updateHouseholdOptionsRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}
@@ -76,7 +76,7 @@ func (h *HouseholdHandler) UpdateMyOptions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var request updateMyOptionsRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}
@@ -107,7 +107,7 @@ func (h *HouseholdHandler) CreateInvitation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var request createInvitationRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}

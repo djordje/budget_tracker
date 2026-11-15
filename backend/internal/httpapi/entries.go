@@ -135,7 +135,7 @@ func (h *EntryHandler) create(w http.ResponseWriter, r *http.Request, kind finan
 	}
 
 	var request entryCreateRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}
@@ -218,7 +218,7 @@ func (h *EntryHandler) update(w http.ResponseWriter, r *http.Request, kind finan
 	}
 
 	var request entryUpdateRequest
-	if err := decodeJSON(w, r, &request); err != nil {
+	if err := decodeJSON(r, &request); err != nil {
 		WriteDecodeError(w, err)
 		return
 	}

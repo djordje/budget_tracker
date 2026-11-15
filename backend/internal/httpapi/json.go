@@ -86,7 +86,7 @@ func WriteValidationError(w http.ResponseWriter, fields map[string]string) {
 // decodeJSON decodes exactly one JSON object with a bounded body size and a
 // strict media type. It rejects null, arrays, scalars, empty bodies, unknown
 // fields, and trailing values while allowing trailing whitespace.
-func decodeJSON(_ http.ResponseWriter, r *http.Request, destination any) error {
+func decodeJSON(r *http.Request, destination any) error {
 	if err := validateJSONContentType(r.Header.Get("Content-Type")); err != nil {
 		return err
 	}
