@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/google/uuid"
 
 	"budgettracker/internal/households"
@@ -28,9 +31,7 @@ func TestMyOptionsUsesCombinedView(t *testing.T) {
 	handler := NewHouseholdHandler(stubHouseholdService{
 		getOptionsView: func(_ context.Context, _ uuid.UUID, gotHousehold uuid.UUID) (households.OptionsView, error) {
 			calls++
-			if gotHousehold != householdID {
-				t.Errorf("household = %s, want %s", gotHousehold, householdID)
-			}
+			assert.Equal(t, householdID, gotHousehold, "household")
 			return view, nil
 		},
 	}, discardLogger())
@@ -39,22 +40,14 @@ func TestMyOptionsUsesCombinedView(t *testing.T) {
 	request.SetPathValue("householdID", householdID.String())
 	recorder := serveEntryRequest(t, activeEntrySession(), handler.MyOptions, request)
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-	if calls != 1 {
-		t.Errorf("options reads = %d, want 1", calls)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, 1, calls, "options reads")
+
 	var body myOptionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Options.DefaultIncomeCurrencyCode == nil || *body.Options.DefaultIncomeCurrencyCode != "EUR" {
-		t.Errorf("options = %+v", body.Options)
-	}
-	if body.Effective.DefaultSpendingCurrencyCode != "RSD" {
-		t.Errorf("effective = %+v", body.Effective)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	require.NotNil(t, body.Options.DefaultIncomeCurrencyCode, "options = %+v", body.Options)
+	assert.Equal(t, "EUR", *body.Options.DefaultIncomeCurrencyCode, "options = %+v", body.Options)
+	assert.Equal(t, "RSD", body.Effective.DefaultSpendingCurrencyCode, "effective = %+v", body.Effective)
 }
 
 func TestUpdateMyOptionsReturnsCommittedView(t *testing.T) {
@@ -84,19 +77,12 @@ func TestUpdateMyOptionsReturnsCommittedView(t *testing.T) {
 	request.SetPathValue("householdID", householdID.String())
 	recorder := serveEntryRequest(t, activeEntrySession(), handler.UpdateMyOptions, request)
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-	if viewCalls != 0 {
-		t.Errorf("handler performed %d extra options reads, want 0", viewCalls)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Zero(t, viewCalls, "extra options reads")
+
 	var response myOptionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response.Effective.DefaultDisplayCurrencyCode != "USD" {
-		t.Errorf("effective = %+v", response.Effective)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response), "decode response")
+	assert.Equal(t, "USD", response.Effective.DefaultDisplayCurrencyCode, "effective = %+v", response.Effective)
 }
 
 func TestRevokeInvitationBindsBothPathIDs(t *testing.T) {
@@ -116,12 +102,8 @@ func TestRevokeInvitationBindsBothPathIDs(t *testing.T) {
 		request.SetPathValue("invitationID", invitationID.String())
 		recorder := serveEntryRequest(t, activeEntrySession(), handler.RevokeInvitation, request)
 
-		if recorder.Code != http.StatusNotFound {
-			t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-		}
-		if called {
-			t.Error("service was called with a malformed household ID")
-		}
+		assert.Equal(t, http.StatusNotFound, recorder.Code)
+		assert.False(t, called, "service was called with a malformed household ID")
 	})
 
 	t.Run("mismatched pair", func(t *testing.T) {
@@ -135,9 +117,7 @@ func TestRevokeInvitationBindsBothPathIDs(t *testing.T) {
 		request.SetPathValue("invitationID", invitationID.String())
 		recorder := serveEntryRequest(t, activeEntrySession(), handler.RevokeInvitation, request)
 
-		if recorder.Code != http.StatusNotFound {
-			t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-		}
+		assert.Equal(t, http.StatusNotFound, recorder.Code)
 	})
 
 	t.Run("success passes both IDs", func(t *testing.T) {
@@ -153,11 +133,8 @@ func TestRevokeInvitationBindsBothPathIDs(t *testing.T) {
 		request.SetPathValue("invitationID", invitationID.String())
 		recorder := serveEntryRequest(t, activeEntrySession(), handler.RevokeInvitation, request)
 
-		if recorder.Code != http.StatusNoContent {
-			t.Errorf("status = %d, want %d", recorder.Code, http.StatusNoContent)
-		}
-		if gotHousehold != householdID || gotInvitation != invitationID {
-			t.Errorf("RevokeInvitation(%s, %s)", gotHousehold, gotInvitation)
-		}
+		assert.Equal(t, http.StatusNoContent, recorder.Code)
+		assert.Equal(t, householdID, gotHousehold, "RevokeInvitation() household")
+		assert.Equal(t, invitationID, gotInvitation, "RevokeInvitation() invitation")
 	})
 }

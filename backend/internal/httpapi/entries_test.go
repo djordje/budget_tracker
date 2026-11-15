@@ -8,6 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,7 +77,7 @@ func activeEntrySession() auth.Session {
 func TestEntryHandlerRequiresActiveHousehold(t *testing.T) {
 	handler := NewEntryHandler(stubEntryService{
 		list: func(context.Context, finance.ListParams) (finance.ListResult, error) {
-			t.Error("service was called without an active household")
+			assert.Fail(t, "service was called without an active household")
 			return finance.ListResult{}, nil
 		},
 	}, discardLogger())
@@ -84,16 +87,11 @@ func TestEntryHandlerRequiresActiveHousehold(t *testing.T) {
 	recorder := serveEntryRequest(t, session, handler.ListIncome,
 		httptest.NewRequest(http.MethodGet, "/api/v1/incomes", nil))
 
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnprocessableEntity)
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Error.Fields["household_id"] == "" {
-		t.Errorf("fields = %v, want a household_id error", body.Error.Fields)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.NotEmpty(t, body.Error.Fields["household_id"], "fields = %v, want a household_id error", body.Error.Fields)
 }
 
 func TestEntryHandlerRejectsInvalidPathIDs(t *testing.T) {
@@ -111,12 +109,8 @@ func TestEntryHandlerRejectsInvalidPathIDs(t *testing.T) {
 			request.SetPathValue("entryID", raw)
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.GetIncome, request)
 
-			if recorder.Code != http.StatusNotFound {
-				t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-			}
-			if called {
-				t.Error("service was called for an invalid entry ID")
-			}
+			assert.Equal(t, http.StatusNotFound, recorder.Code)
+			assert.False(t, called, "service was called for an invalid entry ID")
 		})
 	}
 }
@@ -133,18 +127,14 @@ func TestEntryHandlerParsesQuery(t *testing.T) {
 	recorder := serveEntryRequest(t, activeEntrySession(), handler.ListIncome,
 		httptest.NewRequest(http.MethodGet, "/api/v1/incomes?scope=all&from=2026-10-01&to=2026-10-31&page=2&page_size=5", nil))
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
-	if got.Scope != finance.ScopeAll || got.Page != 2 || got.PageSize != 5 {
-		t.Errorf("params = %+v", got)
-	}
-	if got.From == nil || got.From.Format("2006-01-02") != "2026-10-01" {
-		t.Errorf("from = %v", got.From)
-	}
-	if got.To == nil || got.To.Format("2006-01-02") != "2026-10-31" {
-		t.Errorf("to = %v", got.To)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, finance.ScopeAll, got.Scope, "params = %+v", got)
+	assert.Equal(t, 2, got.Page, "params = %+v", got)
+	assert.Equal(t, 5, got.PageSize, "params = %+v", got)
+	require.NotNil(t, got.From, "from")
+	assert.Equal(t, "2026-10-01", got.From.Format("2006-01-02"), "from")
+	require.NotNil(t, got.To, "to")
+	assert.Equal(t, "2026-10-31", got.To.Format("2006-01-02"), "to")
 }
 
 func TestEntryHandlerRejectsInvalidQuery(t *testing.T) {
@@ -162,15 +152,13 @@ func TestEntryHandlerRejectsInvalidQuery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewEntryHandler(stubEntryService{
 				list: func(context.Context, finance.ListParams) (finance.ListResult, error) {
-					t.Error("service was called for an invalid query")
+					assert.Fail(t, "service was called for an invalid query")
 					return finance.ListResult{}, nil
 				},
 			}, discardLogger())
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.ListIncome,
 				httptest.NewRequest(http.MethodGet, "/api/v1/incomes?"+tt.query, nil))
-			if recorder.Code != http.StatusBadRequest {
-				t.Errorf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-			}
+			assert.Equal(t, http.StatusBadRequest, recorder.Code)
 		})
 	}
 }
@@ -199,16 +187,11 @@ func TestEntryHandlerMapsServiceErrors(t *testing.T) {
 			request.SetPathValue("entryID", "42")
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.GetIncome, request)
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+
 			var body ErrorResponse
-			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if body.Error.Code != tt.wantCode {
-				t.Errorf("error code = %q, want %q", body.Error.Code, tt.wantCode)
-			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+			assert.Equal(t, tt.wantCode, body.Error.Code, "error code")
 		})
 	}
 }
@@ -238,25 +221,17 @@ func TestEntryHandlerCreateResponse(t *testing.T) {
 	recorder := serveEntryRequest(t, session, handler.CreateIncome,
 		httptest.NewRequest(http.MethodPost, "/api/v1/incomes", strings.NewReader(`{"amount":"12.34"}`)))
 
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
-	}
-	if got.HouseholdID != householdID || got.ActorID != session.User.ID {
-		t.Errorf("params = %+v", got)
-	}
-	if got := recorder.Header().Get("Location"); got != "/api/v1/incomes/42" {
-		t.Errorf("Location = %q", got)
-	}
+	require.Equal(t, http.StatusCreated, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, householdID, got.HouseholdID, "params = %+v", got)
+	assert.Equal(t, session.User.ID, got.ActorID, "params = %+v", got)
+	assert.Equal(t, "/api/v1/incomes/42", recorder.Header().Get("Location"), "Location")
+
 	var body entryResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Entry.ID != "42" || body.Entry.Amount != "12.34" {
-		t.Errorf("entry = %+v", body.Entry)
-	}
-	if body.Entry.UserID != nil || body.Entry.Description != nil {
-		t.Errorf("nullable fields = user_id %v, description %v, want null", body.Entry.UserID, body.Entry.Description)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "42", body.Entry.ID, "entry = %+v", body.Entry)
+	assert.Equal(t, "12.34", body.Entry.Amount, "entry = %+v", body.Entry)
+	assert.Nil(t, body.Entry.UserID, "user_id should be null")
+	assert.Nil(t, body.Entry.Description, "description should be null")
 }
 
 func TestEntryHandlerListEnvelope(t *testing.T) {
@@ -284,17 +259,12 @@ func TestEntryHandlerListEnvelope(t *testing.T) {
 	recorder := serveEntryRequest(t, activeEntrySession(), handler.ListSpending,
 		httptest.NewRequest(http.MethodGet, "/api/v1/spendings", nil))
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+
 	var body entriesResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(body.Entries) != 1 || body.Entries[0].ID != "7" {
-		t.Errorf("entries = %+v", body.Entries)
-	}
-	if body.Pagination.Total != 1 || body.Pagination.TotalPages != 1 {
-		t.Errorf("pagination = %+v", body.Pagination)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	require.Len(t, body.Entries, 1)
+	assert.Equal(t, "7", body.Entries[0].ID, "entries = %+v", body.Entries)
+	assert.Equal(t, 1, body.Pagination.Total, "pagination = %+v", body.Pagination)
+	assert.Equal(t, 1, body.Pagination.TotalPages, "pagination = %+v", body.Pagination)
 }

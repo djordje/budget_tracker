@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestID(t *testing.T) {
@@ -20,12 +23,8 @@ func TestRequestID(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	headerID := recorder.Header().Get("X-Request-ID")
-	if headerID == "" {
-		t.Fatal("X-Request-ID header is empty")
-	}
-	if contextID != headerID {
-		t.Errorf("context request ID = %q, header = %q", contextID, headerID)
-	}
+	require.NotEmpty(t, headerID, "X-Request-ID header")
+	assert.Equal(t, headerID, contextID, "context request ID")
 }
 
 func TestRequestLogger(t *testing.T) {
@@ -40,21 +39,11 @@ func TestRequestLogger(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/things", nil))
 
 	var entry map[string]any
-	if err := json.Unmarshal([]byte(output.String()), &entry); err != nil {
-		t.Fatalf("log output is not JSON: %v\n%s", err, output.String())
-	}
-	if entry["status"] != float64(http.StatusCreated) {
-		t.Errorf("status = %v, want %d", entry["status"], http.StatusCreated)
-	}
-	if entry["method"] != http.MethodPost {
-		t.Errorf("method = %v, want POST", entry["method"])
-	}
-	if entry["path"] != "/things" {
-		t.Errorf("path = %v, want /things", entry["path"])
-	}
-	if entry["request_id"] == "" {
-		t.Error("request_id is empty")
-	}
+	require.NoError(t, json.Unmarshal([]byte(output.String()), &entry), "log output: %s", output.String())
+	assert.InDelta(t, http.StatusCreated, entry["status"], 0, "status")
+	assert.Equal(t, http.MethodPost, entry["method"], "method")
+	assert.Equal(t, "/things", entry["path"], "path")
+	assert.NotEmpty(t, entry["request_id"], "request_id")
 }
 
 func TestRecovererAPIRespondsWithJSON(t *testing.T) {
@@ -67,22 +56,13 @@ func TestRecovererAPIRespondsWithJSON(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/things", nil))
 
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q", got)
-	}
+	require.Equal(t, http.StatusInternalServerError, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"), "Content-Type")
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if body.Error.Code != "internal_error" {
-		t.Errorf("error code = %q, want internal_error", body.Error.Code)
-	}
-	if !strings.Contains(output.String(), "panic recovered") {
-		t.Errorf("log output missing panic message: %s", output.String())
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode error response")
+	assert.Equal(t, "internal_error", body.Error.Code, "error code")
+	assert.Contains(t, output.String(), "panic recovered", "log output missing panic message")
 }
 
 func TestRecovererHTMLRespondsWithPlainText(t *testing.T) {
@@ -95,15 +75,9 @@ func TestRecovererHTMLRespondsWithPlainText(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/app", nil))
 
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
-	}
-	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
-		t.Errorf("Content-Type = %q, want text/plain", got)
-	}
-	if !strings.Contains(recorder.Body.String(), "internal server error") {
-		t.Errorf("body = %q", recorder.Body.String())
-	}
+	require.Equal(t, http.StatusInternalServerError, recorder.Code, "body = %s", recorder.Body.String())
+	assert.True(t, strings.HasPrefix(recorder.Header().Get("Content-Type"), "text/plain"), "Content-Type = %q", recorder.Header().Get("Content-Type"))
+	assert.Contains(t, recorder.Body.String(), "internal server error")
 }
 
 func TestRecovererAfterCommitAppendsNothing(t *testing.T) {
@@ -118,15 +92,9 @@ func TestRecovererAfterCommitAppendsNothing(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/app", nil))
 
-	if recorder.Code != http.StatusCreated {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusCreated)
-	}
-	if got := recorder.Body.String(); got != "partial" {
-		t.Errorf("body = %q, want partial", got)
-	}
-	if !strings.Contains(output.String(), "panic recovered") {
-		t.Errorf("log output missing panic message: %s", output.String())
-	}
+	assert.Equal(t, http.StatusCreated, recorder.Code)
+	assert.Equal(t, "partial", recorder.Body.String(), "body")
+	assert.Contains(t, output.String(), "panic recovered", "log output missing panic message")
 }
 
 func TestRequestLoggerRedactsInvitationToken(t *testing.T) {
@@ -136,10 +104,6 @@ func TestRequestLoggerRedactsInvitationToken(t *testing.T) {
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/invitations/secret-token", nil))
 
-	if strings.Contains(output.String(), "secret-token") {
-		t.Fatalf("invitation token was logged: %s", output.String())
-	}
-	if !strings.Contains(output.String(), "/invitations/[redacted]") {
-		t.Errorf("redacted path missing: %s", output.String())
-	}
+	assert.NotContains(t, output.String(), "secret-token", "invitation token was logged")
+	assert.Contains(t, output.String(), "/invitations/[redacted]", "redacted path missing")
 }

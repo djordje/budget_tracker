@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/google/uuid"
 
 	"budgettracker/internal/finance"
@@ -52,12 +55,8 @@ func TestExchangeRateHandlerRejectsInvalidPathIDs(t *testing.T) {
 			request.SetPathValue("rateID", raw)
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.Update, request)
 
-			if recorder.Code != http.StatusNotFound {
-				t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-			}
-			if called {
-				t.Error("service was called for an invalid rate ID")
-			}
+			assert.Equal(t, http.StatusNotFound, recorder.Code)
+			assert.False(t, called, "service was called for an invalid rate ID")
 		})
 	}
 }
@@ -80,19 +79,13 @@ func TestExchangeRateHandlerCreateResponse(t *testing.T) {
 	recorder := serveEntryRequest(t, session, handler.Create,
 		httptest.NewRequest(http.MethodPost, "/api/v1/exchange-rates", strings.NewReader(`{"from_currency_code":"EUR","to_currency_code":"RSD","rate":"117.5","rate_date":"2026-10-01"}`)))
 
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
-	}
-	if got := recorder.Header().Get("Location"); got != "/api/v1/exchange-rates/5" {
-		t.Errorf("Location = %q", got)
-	}
+	require.Equal(t, http.StatusCreated, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "/api/v1/exchange-rates/5", recorder.Header().Get("Location"), "Location")
+
 	var body exchangeRateResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Rate.ID != "5" || body.Rate.Rate != "117.5" {
-		t.Errorf("rate = %+v", body.Rate)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "5", body.Rate.ID, "rate = %+v", body.Rate)
+	assert.Equal(t, "117.5", body.Rate.Rate, "rate = %+v", body.Rate)
 }
 
 func TestExchangeRateHandlerMapsServiceErrors(t *testing.T) {
@@ -119,16 +112,11 @@ func TestExchangeRateHandlerMapsServiceErrors(t *testing.T) {
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.List,
 				httptest.NewRequest(http.MethodGet, "/api/v1/exchange-rates", nil))
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+
 			var body ErrorResponse
-			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if body.Error.Code != tt.wantCode {
-				t.Errorf("error code = %q, want %q", body.Error.Code, tt.wantCode)
-			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+			assert.Equal(t, tt.wantCode, body.Error.Code, "error code")
 		})
 	}
 }

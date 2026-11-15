@@ -6,22 +6,21 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteValidationError(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	WriteValidationError(recorder, map[string]string{"name": "Name is required."})
 
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusUnprocessableEntity)
-	}
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Error.Code != "validation_failed" || body.Error.Fields["name"] == "" {
-		t.Errorf("error body = %+v", body.Error)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "validation_failed", body.Error.Code, "error body = %+v", body.Error)
+	assert.NotEmpty(t, body.Error.Fields["name"], "error body = %+v", body.Error)
 }
 
 func TestDecodeJSONMediaTypes(t *testing.T) {
@@ -46,9 +45,8 @@ func TestDecodeJSONMediaTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			status, code, _ := decodeAndRespond(t, tt.contentType, `{"name":"Home"}`)
-			if status != tt.wantStatus || code != tt.wantCode {
-				t.Errorf("status/code = %d/%q, want %d/%q", status, code, tt.wantStatus, tt.wantCode)
-			}
+			assert.Equal(t, tt.wantStatus, status, "status")
+			assert.Equal(t, tt.wantCode, code, "error code")
 		})
 	}
 }
@@ -77,9 +75,8 @@ func TestDecodeJSONBodyShapes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			status, code, _ := decodeAndRespond(t, "application/json", tt.body)
-			if status != tt.wantStatus || code != tt.wantCode {
-				t.Errorf("status/code = %d/%q, want %d/%q", status, code, tt.wantStatus, tt.wantCode)
-			}
+			assert.Equal(t, tt.wantStatus, status, "status")
+			assert.Equal(t, tt.wantCode, code, "error code")
 		})
 	}
 }
@@ -89,14 +86,12 @@ func TestDecodeJSONBodyLimit(t *testing.T) {
 	over := jsonObjectOfSize(maxJSONBodyBytes + 1)
 
 	status, code, _ := decodeAndRespond(t, "application/json", exact)
-	if status != 0 || code != "" {
-		t.Errorf("exact-limit body status/code = %d/%q, want success", status, code)
-	}
+	assert.Zero(t, status, "exact-limit body status")
+	assert.Empty(t, code, "exact-limit body error code")
 
 	status, code, _ = decodeAndRespond(t, "application/json", over)
-	if status != http.StatusRequestEntityTooLarge || code != "request_too_large" {
-		t.Errorf("over-limit body status/code = %d/%q, want 413/request_too_large", status, code)
-	}
+	assert.Equal(t, http.StatusRequestEntityTooLarge, status, "over-limit body status")
+	assert.Equal(t, "request_too_large", code, "over-limit body error code")
 }
 
 func TestDecodeJSONErrorResponsesAreSafeJSON(t *testing.T) {
@@ -108,27 +103,16 @@ func TestDecodeJSONErrorResponsesAreSafeJSON(t *testing.T) {
 	}
 
 	err := decodeJSON(recorder, request, &destination)
-	if err == nil {
-		t.Fatal("decodeJSON() error = nil, want error")
-	}
+	require.Error(t, err, "decodeJSON()")
 	WriteDecodeError(recorder, err)
 
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q", got)
-	}
+	require.Equal(t, http.StatusBadRequest, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"), "Content-Type")
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if body.Error.Code != "invalid_request" {
-		t.Errorf("code = %q", body.Error.Code)
-	}
-	if strings.Contains(strings.ToLower(body.Error.Message), "invalid character") {
-		t.Errorf("error message leaked parser details: %q", body.Error.Message)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode error response")
+	assert.Equal(t, "invalid_request", body.Error.Code, "error code")
+	assert.NotContains(t, strings.ToLower(body.Error.Message), "invalid character", "error message leaked parser details: %q", body.Error.Message)
 }
 
 func decodeAndRespond(t *testing.T, contentType, body string) (int, string, string) {
@@ -148,9 +132,7 @@ func decodeAndRespond(t *testing.T, contentType, body string) (int, string, stri
 	WriteDecodeError(recorder, err)
 
 	var response ErrorResponse
-	if unmarshalErr := json.Unmarshal(recorder.Body.Bytes(), &response); unmarshalErr != nil {
-		t.Fatalf("decode error response: %v", unmarshalErr)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response), "decode error response")
 	return recorder.Code, response.Error.Code, response.Error.Message
 }
 

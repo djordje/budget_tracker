@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/google/uuid"
 
 	"budgettracker/internal/auth"
@@ -93,16 +96,11 @@ func TestHouseholdHandlerRequiresAuthentication(t *testing.T) {
 
 	RequireAuthAPI(handler.List)(recorder, request)
 
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
+	require.Equal(t, http.StatusUnauthorized, recorder.Code, "body = %s", recorder.Body.String())
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Error.Code != "unauthenticated" {
-		t.Errorf("error code = %q", body.Error.Code)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "unauthenticated", body.Error.Code, "error code")
 }
 
 func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
@@ -116,9 +114,8 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 	var gotHash string
 	handler := NewHouseholdHandler(stubHouseholdService{
 		createAndActivate: func(_ context.Context, actorID uuid.UUID, sessionHash, name string) (households.Household, error) {
-			if actorID != userID || name != "Home" {
-				t.Errorf("CreateAndActivate(%s, %q), want user %s and Home", actorID, name, userID)
-			}
+			assert.Equal(t, userID, actorID, "CreateAndActivate() actor")
+			assert.Equal(t, "Home", name, "CreateAndActivate() name")
 			gotHash = sessionHash
 			return household, nil
 		},
@@ -127,22 +124,13 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 	recorder := sessionRequest(t, auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: tokenHash}, http.HandlerFunc(handler.Create),
 		http.MethodPost, "/api/v1/households", `{"name":"Home"}`)
 
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
-	}
-	if gotHash != tokenHash {
-		t.Errorf("session token hash = %q, want %q", gotHash, tokenHash)
-	}
-	if got := recorder.Header().Get("Location"); got != "/api/v1/households/"+household.ID.String() {
-		t.Errorf("Location = %q", got)
-	}
+	require.Equal(t, http.StatusCreated, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, tokenHash, gotHash, "session token hash")
+	assert.Equal(t, "/api/v1/households/"+household.ID.String(), recorder.Header().Get("Location"), "Location")
+
 	var body householdResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Household.ID != household.ID.String() {
-		t.Errorf("response household = %+v", body.Household)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, household.ID.String(), body.Household.ID, "response household = %+v", body.Household)
 }
 
 func TestHouseholdHandlerCreateMapsActivationFailure(t *testing.T) {
@@ -156,12 +144,8 @@ func TestHouseholdHandlerCreateMapsActivationFailure(t *testing.T) {
 		auth.Session{UserID: uuid.New(), User: auth.User{ID: uuid.New()}, TokenHash: strings.Repeat("a", 64)},
 		http.HandlerFunc(handler.Create), http.MethodPost, "/api/v1/households", `{"name":"Home"}`)
 
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
-	if recorder.Header().Get("Location") != "" {
-		t.Error("failed creation returned a Location header")
-	}
+	require.Equal(t, http.StatusUnauthorized, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Empty(t, recorder.Header().Get("Location"), "failed creation returned a Location header")
 }
 
 func TestHouseholdHandlerMapsServiceErrors(t *testing.T) {
@@ -195,16 +179,11 @@ func TestHouseholdHandlerMapsServiceErrors(t *testing.T) {
 			auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, discardLogger()).
 				Load(http.HandlerFunc(handler.Get)).ServeHTTP(recorder, request)
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+
 			var body ErrorResponse
-			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if body.Error.Code != tt.wantCode {
-				t.Errorf("error code = %q, want %q", body.Error.Code, tt.wantCode)
-			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+			assert.Equal(t, tt.wantCode, body.Error.Code, "error code")
 		})
 	}
 }
@@ -229,10 +208,6 @@ func TestHouseholdHandlerRejectsMalformedPathID(t *testing.T) {
 		discardLogger(),
 	).Load(http.HandlerFunc(handler.Get)).ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-	}
-	if called {
-		t.Error("service was called for a malformed household ID")
-	}
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.False(t, called, "service was called for a malformed household ID")
 }

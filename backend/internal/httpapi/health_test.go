@@ -10,6 +10,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func discardLogger() *slog.Logger {
@@ -30,20 +33,12 @@ func TestHealthLive(t *testing.T) {
 
 	handler.Live(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q", got)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"), "Content-Type")
 
 	var body healthResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Status != "ok" {
-		t.Errorf("status = %q, want ok", body.Status)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "ok", body.Status, "status")
 }
 
 func TestHealthReady(t *testing.T) {
@@ -73,12 +68,8 @@ func TestHealthReady(t *testing.T) {
 
 			handler.Ready(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
-			if !strings.Contains(recorder.Body.String(), tt.wantBody) {
-				t.Errorf("body = %q, want it to contain %q", recorder.Body.String(), tt.wantBody)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), tt.wantBody)
 		})
 	}
 }
@@ -94,7 +85,5 @@ func TestHealthUsesDefaultLoggerWhenNil(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.Ready(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
-	if !strings.Contains(output.String(), "readiness check failed") {
-		t.Errorf("default logger did not receive the readiness warning: %s", output.String())
-	}
+	assert.Contains(t, output.String(), "readiness check failed", "default logger did not receive the readiness warning")
 }

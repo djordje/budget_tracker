@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSecurityHeaders(t *testing.T) {
@@ -22,13 +24,9 @@ func TestSecurityHeaders(t *testing.T) {
 		"Cross-Origin-Opener-Policy": "same-origin",
 		"Cache-Control":              "no-store",
 	} {
-		if got := recorder.Header().Get(name); got != want {
-			t.Errorf("%s = %q, want %q", name, got, want)
-		}
+		assert.Equal(t, want, recorder.Header().Get(name), name)
 	}
-	if got := recorder.Header().Get("Strict-Transport-Security"); got != "" {
-		t.Errorf("development HSTS = %q, want empty", got)
-	}
+	assert.Empty(t, recorder.Header().Get("Strict-Transport-Security"), "development HSTS")
 }
 
 func TestSecurityHeadersProductionHSTSAndStaticCache(t *testing.T) {
@@ -38,10 +36,6 @@ func TestSecurityHeadersProductionHSTSAndStaticCache(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/static/css/app.css", nil))
 
-	if got := recorder.Header().Get("Strict-Transport-Security"); got == "" {
-		t.Error("production HSTS is missing")
-	}
-	if got := recorder.Header().Get("Cache-Control"); got != "" {
-		t.Errorf("static Cache-Control = %q, want empty", got)
-	}
+	assert.NotEmpty(t, recorder.Header().Get("Strict-Transport-Security"), "production HSTS is missing")
+	assert.Empty(t, recorder.Header().Get("Cache-Control"), "static Cache-Control")
 }

@@ -7,6 +7,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCSRFSetsTokenOnSafeRequest(t *testing.T) {
@@ -21,27 +24,17 @@ func TestCSRFSetsTokenOnSafeRequest(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	cookies := recorder.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("got %d cookies, want 1", len(cookies))
-	}
-	if cookies[0].Name != DefaultCSRFCookieName {
-		t.Errorf("cookie name = %q", cookies[0].Name)
-	}
-	if cookies[0].HttpOnly {
-		t.Error("CSRF cookie should be readable by scripts")
-	}
-	if contextToken == "" || contextToken != cookies[0].Value {
-		t.Errorf("context token = %q, cookie = %q", contextToken, cookies[0].Value)
-	}
-	if !validCSRFToken(contextToken) {
-		t.Error("generated CSRF token is not valid")
-	}
+	require.Len(t, cookies, 1, "cookies")
+	assert.Equal(t, DefaultCSRFCookieName, cookies[0].Name, "cookie name")
+	assert.False(t, cookies[0].HttpOnly, "CSRF cookie should be readable by scripts")
+	assert.Equal(t, cookies[0].Value, contextToken, "context token")
+	assert.True(t, validCSRFToken(contextToken), "generated CSRF token is not valid")
 }
 
 func TestCSRFRejectsMissingToken(t *testing.T) {
 	csrf := NewCSRF(CSRFConfig{})
 	handler := csrf.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Error("handler was called for an unverified request")
+		assert.Fail(t, "handler was called for an unverified request")
 	}))
 
 	recorder := httptest.NewRecorder()
@@ -49,9 +42,7 @@ func TestCSRFRejectsMissingToken(t *testing.T) {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	handler.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusForbidden {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
 }
 
 func TestCSRFAcceptsFormToken(t *testing.T) {
@@ -68,9 +59,7 @@ func TestCSRFAcceptsFormToken(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNoContent)
-	}
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
 func TestCSRFAcceptsHeaderToken(t *testing.T) {
@@ -86,42 +75,31 @@ func TestCSRFAcceptsHeaderToken(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNoContent)
-	}
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
 func TestCSRFReturnsJSONForAPI(t *testing.T) {
 	csrf := NewCSRF(CSRFConfig{})
 	handler := csrf.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Error("handler was called for an unverified request")
+		assert.Fail(t, "handler was called for an unverified request")
 	}))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/things", nil)
 	handler.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q", got)
-	}
+	require.Equal(t, http.StatusForbidden, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"), "Content-Type")
+
 	var body ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if body.Error.Code != "csrf_failed" {
-		t.Errorf("code = %q, want csrf_failed", body.Error.Code)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode error response")
+	assert.Equal(t, "csrf_failed", body.Error.Code, "error code")
 }
 
 func TestCSRFReplacesInvalidCookie(t *testing.T) {
 	csrf := NewCSRF(CSRFConfig{})
 	handler := csrf.Protect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !validCSRFToken(CSRFToken(r.Context())) {
-			t.Error("context token is invalid")
-		}
+		assert.True(t, validCSRFToken(CSRFToken(r.Context())), "context token is invalid")
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
@@ -131,7 +109,6 @@ func TestCSRFReplacesInvalidCookie(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 
 	cookies := recorder.Result().Cookies()
-	if len(cookies) != 1 || !validCSRFToken(cookies[0].Value) {
-		t.Errorf("cookies = %+v, want a replacement token", cookies)
-	}
+	require.Len(t, cookies, 1, "cookies = %+v, want a replacement token", cookies)
+	assert.True(t, validCSRFToken(cookies[0].Value), "cookies = %+v, want a replacement token", cookies)
 }

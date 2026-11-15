@@ -8,6 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"budgettracker/internal/finance"
 	"budgettracker/internal/reporting"
 )
@@ -37,15 +40,12 @@ func TestReportHandlerTranslatesQuery(t *testing.T) {
 		nil,
 	))
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body = %s", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-	if got.HouseholdID != householdID || got.Scope != finance.ScopeAll || got.DisplayCurrency != "EUR" {
-		t.Errorf("params = %+v", got)
-	}
-	if got.From.Format("2006-01-02") != "2026-10-01" || got.To.Format("2006-01-02") != "2026-10-31" {
-		t.Errorf("date range = %v to %v", got.From, got.To)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, householdID, got.HouseholdID, "params = %+v", got)
+	assert.Equal(t, finance.ScopeAll, got.Scope, "params = %+v", got)
+	assert.Equal(t, "EUR", got.DisplayCurrency, "params = %+v", got)
+	assert.Equal(t, "2026-10-01", got.From.Format("2006-01-02"), "from")
+	assert.Equal(t, "2026-10-31", got.To.Format("2006-01-02"), "to")
 }
 
 func TestReportHandlerRejectsInvalidRequests(t *testing.T) {
@@ -65,15 +65,13 @@ func TestReportHandlerRejectsInvalidRequests(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewReportHandler(stubReportService{
 				summary: func(context.Context, reporting.SummaryParams) (reporting.Summary, error) {
-					t.Error("service was called for an invalid request")
+					assert.Fail(t, "service was called for an invalid request")
 					return reporting.Summary{}, nil
 				},
 			}, discardLogger())
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.Summary,
 				httptest.NewRequest(http.MethodGet, "/api/v1/reports/summary?"+tt.query, nil))
-			if recorder.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			assert.Equal(t, tt.wantStatus, recorder.Code)
 		})
 	}
 }
@@ -101,16 +99,11 @@ func TestReportHandlerMapsServiceErrors(t *testing.T) {
 			recorder := serveEntryRequest(t, activeEntrySession(), handler.Summary,
 				httptest.NewRequest(http.MethodGet, "/api/v1/reports/summary?from=2026-10-01&to=2026-10-31", nil))
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
+
 			var body ErrorResponse
-			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if body.Error.Code != tt.wantCode {
-				t.Errorf("error code = %q, want %q", body.Error.Code, tt.wantCode)
-			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+			assert.Equal(t, tt.wantCode, body.Error.Code, "error code")
 		})
 	}
 }
@@ -140,17 +133,11 @@ func TestReportHandlerMissingRateData(t *testing.T) {
 	recorder := serveEntryRequest(t, session, handler.Summary,
 		httptest.NewRequest(http.MethodGet, "/api/v1/reports/summary?from=2026-10-01&to=2026-10-31", nil))
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+
 	var body summaryResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Summary.Complete {
-		t.Error("summary reported complete with a missing rate")
-	}
-	if len(body.Summary.MissingRates) != 1 || body.Summary.MissingRates[0].FromCurrencyCode != "GBP" {
-		t.Errorf("missing rates = %+v", body.Summary.MissingRates)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.False(t, body.Summary.Complete, "summary reported complete with a missing rate")
+	require.Len(t, body.Summary.MissingRates, 1, "missing rates = %+v", body.Summary.MissingRates)
+	assert.Equal(t, "GBP", body.Summary.MissingRates[0].FromCurrencyCode, "missing rates = %+v", body.Summary.MissingRates)
 }
