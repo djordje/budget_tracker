@@ -54,6 +54,7 @@ func (s stubSessions) SetActiveHousehold(context.Context, string, uuid.UUID, *uu
 type stubHouseholds struct {
 	HouseholdService
 	households        []households.Household
+	invitations       []households.Invitation
 	err               error
 	getOptionsErr     error
 	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
@@ -111,7 +112,7 @@ func (s stubHouseholds) CreateInvitation(context.Context, households.CreateInvit
 }
 
 func (s stubHouseholds) ListInvitations(context.Context, uuid.UUID, uuid.UUID) ([]households.Invitation, error) {
-	return nil, s.err
+	return s.invitations, s.err
 }
 
 func (s stubHouseholds) InvitationByToken(context.Context, string) (households.Invitation, error) {

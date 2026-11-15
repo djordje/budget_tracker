@@ -66,13 +66,13 @@
     </form>
 
     {{if .Invitations}}
-      <h3 class="mt-6 text-sm font-semibold uppercase tracking-wide text-stone-500">Pending invitations</h3>
+      <h3 class="mt-6 text-sm font-semibold uppercase tracking-wide text-stone-500">Invitations</h3>
       <ul class="mt-2 divide-y divide-stone-100">
         {{range .Invitations}}
           <li class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p class="font-medium text-stone-900">{{.Email}}</p>
-              <p class="text-sm text-stone-500">{{.Role}} &middot; expires {{.ExpiresAt.Format "2 January 2006"}}</p>
+              <p class="text-sm text-stone-500">{{.Role}} &middot; {{if .Expired}}Expired on {{.ExpiresAt.Format "2 January 2006"}}{{else}}Expires {{.ExpiresAt.Format "2 January 2006"}}{{end}}</p>
             </div>
             <form method="post" action="/app/households/{{$.Household.ID}}/invitations/{{.ID}}/delete" data-confirm="Revoke this invitation?">
               <input type="hidden" name="csrf_token" value="{{$.CSRF}}">

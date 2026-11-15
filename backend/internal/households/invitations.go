@@ -50,6 +50,13 @@ type Invitation struct {
 	CreatedAt       time.Time
 }
 
+// Expired reports whether the invitation is no longer valid at now. Acceptance
+// and this check share one boundary: an invitation is expired from ExpiresAt
+// onward.
+func (i Invitation) Expired(now time.Time) bool {
+	return !now.Before(i.ExpiresAt)
+}
+
 // CreateInvitationParams contains invite input.
 type CreateInvitationParams struct {
 	HouseholdID uuid.UUID
@@ -202,7 +209,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rawToken string, userID 
 		if invitation.AcceptedAt != nil {
 			return ErrInvitationAccepted
 		}
-		if !time.Now().UTC().Before(invitation.ExpiresAt) {
+		if invitation.Expired(time.Now().UTC()) {
 			return ErrInvitationExpired
 		}
 

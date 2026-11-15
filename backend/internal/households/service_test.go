@@ -3,6 +3,7 @@ package households
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,26 @@ func TestValidateName(t *testing.T) {
 			}
 			require.NoError(t, err, "validateName() error")
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestInvitationExpired(t *testing.T) {
+	expiresAt := time.Date(2026, time.November, 20, 12, 0, 0, 0, time.UTC)
+	invitation := Invitation{ExpiresAt: expiresAt}
+	tests := []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{name: "one second before expiry", now: expiresAt.Add(-time.Second), want: false},
+		{name: "at expiry", now: expiresAt, want: true},
+		{name: "after expiry", now: expiresAt.Add(time.Second), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, invitation.Expired(tt.now))
 		})
 	}
 }

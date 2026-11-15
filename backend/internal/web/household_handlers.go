@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,7 +24,7 @@ type householdSettingsPageData struct {
 	Members            []households.Member
 	Options            households.Options
 	Currencies         []finance.Currency
-	Invitations        []households.Invitation
+	Invitations        []invitationRow
 	Name               string
 	FieldErrors        map[string]string
 	OptionsFieldErrors map[string]string
@@ -31,6 +32,13 @@ type householdSettingsPageData struct {
 	InviteRole         string
 	InviteFieldErrors  map[string]string
 	NewInvitationLink  string
+}
+
+// invitationRow is a listed invitation with its presentation state. Expired
+// invitations stay listed and are labelled expired.
+type invitationRow struct {
+	households.Invitation
+	Expired bool
 }
 
 // NewHouseholdPage serves the household creation form.
@@ -330,6 +338,14 @@ func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (househol
 	if err != nil {
 		return householdSettingsPageData{}, err
 	}
+	now := time.Now().UTC()
+	invitationRows := make([]invitationRow, 0, len(invitations))
+	for _, invitation := range invitations {
+		invitationRows = append(invitationRows, invitationRow{
+			Invitation: invitation,
+			Expired:    invitation.Expired(now),
+		})
+	}
 
 	return householdSettingsPageData{
 		pageData:    data,
@@ -337,7 +353,7 @@ func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (househol
 		Members:     members,
 		Options:     options,
 		Currencies:  currencies,
-		Invitations: invitations,
+		Invitations: invitationRows,
 		Name:        household.Name,
 		InviteRole:  string(households.RoleMember),
 	}, nil

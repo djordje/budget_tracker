@@ -96,7 +96,7 @@ func (h *Handler) invitationData(r *http.Request, token string, invitation house
 		pageData:    h.basePageData(r, "Join "+invitation.HouseholdName),
 		Token:       token,
 		Invitation:  invitation,
-		Expired:     !time.Now().UTC().Before(invitation.ExpiresAt),
+		Expired:     invitation.Expired(time.Now().UTC()),
 		Accepted:    invitation.AcceptedAt != nil,
 		ActionError: actionError,
 	}

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -149,4 +150,45 @@ func TestMalformedHouseholdIDRendersErrorPage(t *testing.T) {
 			assert.Contains(t, body, "Household not found", "error response copy")
 		})
 	}
+}
+
+func TestHouseholdSettingsLabelsExpiredInvitations(t *testing.T) {
+	household := households.Household{ID: uuid.New(), Name: "Home", Role: households.RoleAdmin}
+	expiredAt := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
+	expiresAt := time.Date(2099, time.December, 5, 12, 0, 0, 0, time.UTC)
+	handler, err := New(Deps{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions: stubSessions{},
+		Households: stubHouseholds{
+			households: []households.Household{household},
+			invitations: []households.Invitation{
+				{ID: uuid.New(), HouseholdID: household.ID, Email: "expired@example.com", Role: households.RoleMember, ExpiresAt: expiredAt},
+				{ID: uuid.New(), HouseholdID: household.ID, Email: "pending@example.com", Role: households.RoleMember, ExpiresAt: expiresAt},
+			},
+		},
+		Entries: stubEntries{},
+		Rates:   stubRates{},
+		Reports: stubReports{},
+	})
+	require.NoError(t, err, "New()")
+
+	userID := uuid.New()
+	session := auth.Session{
+		UserID:            userID,
+		User:              auth.User{ID: userID},
+		ActiveHouseholdID: &household.ID,
+	}
+	request := httptest.NewRequest(http.MethodGet, "/app/households/"+household.ID.String()+"/settings", nil)
+	request.SetPathValue("householdID", household.ID.String())
+	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
+	recorder := httptest.NewRecorder()
+	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
+		Load(http.HandlerFunc(handler.HouseholdSettings)).ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Contains(t, body, "expired@example.com", "expired invitation is not listed")
+	assert.Contains(t, body, "Expired on 5 January 2026", "expired invitation is not labelled expired")
+	assert.Contains(t, body, "pending@example.com", "pending invitation is not listed")
+	assert.Contains(t, body, "Expires 5 December 2099", "pending invitation is not labelled with its expiry")
 }
