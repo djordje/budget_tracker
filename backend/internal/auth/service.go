@@ -81,7 +81,8 @@ type passwordVerifier func(encoded, password string) (bool, error)
 
 // Service owns credential, registration, login, and session persistence.
 type Service struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	logger *slog.Logger
 
 	lookup credentialLookup
 	verify passwordVerifier
@@ -92,9 +93,13 @@ type Service struct {
 	cleanup     func(context.Context) (int64, error)
 }
 
-// NewService constructs an authentication service.
-func NewService(pool *pgxpool.Pool) *Service {
-	service := &Service{pool: pool, now: time.Now, verify: VerifyPassword}
+// NewService constructs an authentication service. A nil logger defaults to
+// slog.Default, mirroring NewMiddleware.
+func NewService(pool *pgxpool.Pool, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	service := &Service{pool: pool, logger: logger, now: time.Now, verify: VerifyPassword}
 	service.lookup = service.lookupCredentials
 	service.cleanup = service.DeleteExpiredSessions
 	return service
@@ -295,7 +300,7 @@ func (s *Service) maybeDeleteExpiredSessions(ctx context.Context) {
 		return
 	}
 	if _, err := cleanup(ctx); err != nil {
-		slog.Warn("delete expired sessions", "error", err)
+		s.logger.Warn("delete expired sessions", "error", err)
 	}
 }
 

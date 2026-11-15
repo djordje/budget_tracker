@@ -33,7 +33,7 @@ type financeFixture struct {
 func newFinanceFixture(t *testing.T) *financeFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	authService := auth.NewService(pool)
+	authService := auth.NewService(pool, nil)
 	householdService := households.NewService(pool)
 	service := NewService(pool)
 	ctx := context.Background()

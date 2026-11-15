@@ -15,7 +15,7 @@ import (
 
 func TestRegisterLoginAndSessions(t *testing.T) {
 	pool := testdb.New(t)
-	service := NewService(pool)
+	service := NewService(pool, nil)
 	ctx := context.Background()
 
 	session, err := service.Register(ctx, RegisterParams{
@@ -104,7 +104,7 @@ func TestRegisterLoginAndSessions(t *testing.T) {
 
 func TestLoginRejectsUnknownEmailAndWrongPassword(t *testing.T) {
 	pool := testdb.New(t)
-	service := NewService(pool)
+	service := NewService(pool, nil)
 	ctx := context.Background()
 
 	registered, err := service.Register(ctx, RegisterParams{
@@ -129,7 +129,7 @@ func TestLoginRejectsUnknownEmailAndWrongPassword(t *testing.T) {
 }
 
 func TestRegisterValidationDoesNotTouchDatabase(t *testing.T) {
-	service := NewService(nil)
+	service := NewService(nil, nil)
 
 	_, err := service.Register(context.Background(), RegisterParams{})
 	require.Error(t, err, "Register() with empty params")
@@ -137,7 +137,7 @@ func TestRegisterValidationDoesNotTouchDatabase(t *testing.T) {
 
 func TestSessionsUseTokenHashIdentityAndCleanupExpired(t *testing.T) {
 	pool := testdb.New(t)
-	service := NewService(pool)
+	service := NewService(pool, nil)
 	ctx := context.Background()
 
 	var idColumns int

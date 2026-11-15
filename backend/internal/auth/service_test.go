@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,7 +40,7 @@ func TestLoginVerifiesPasswordForMissingAndKnownEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewService(nil)
+			service := NewService(nil, nil)
 			service.lookup = tt.lookup
 			var verified []string
 			service.verify = func(encoded, password string) (bool, error) {
@@ -76,7 +78,7 @@ func TestLoginRejectsOversizedPasswordBeforeHashing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewService(nil)
+			service := NewService(nil, nil)
 			var lookups, verifications atomic.Int32
 			service.lookup = func(context.Context, string) (User, string, error) {
 				lookups.Add(1)
@@ -113,7 +115,7 @@ func TestDummyPasswordHashUsesProductionParameters(t *testing.T) {
 func TestMaybeDeleteExpiredSessionsRunsAtMostHourly(t *testing.T) {
 	clock := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	var calls atomic.Int32
-	service := NewService(nil)
+	service := NewService(nil, nil)
 	service.now = func() time.Time { return clock }
 	service.cleanup = func(context.Context) (int64, error) {
 		calls.Add(1)
@@ -135,7 +137,7 @@ func TestMaybeDeleteExpiredSessionsRunsAtMostHourly(t *testing.T) {
 func TestMaybeDeleteExpiredSessionsIsConcurrencySafe(t *testing.T) {
 	clock := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	var calls atomic.Int32
-	service := NewService(nil)
+	service := NewService(nil, nil)
 	service.now = func() time.Time { return clock }
 	service.cleanup = func(context.Context) (int64, error) {
 		calls.Add(1)
@@ -156,10 +158,14 @@ func TestMaybeDeleteExpiredSessionsIsConcurrencySafe(t *testing.T) {
 }
 
 func TestMaybeDeleteExpiredSessionsLogsFailureWithoutFailing(t *testing.T) {
-	service := NewService(nil)
+	var logs bytes.Buffer
+	service := NewService(nil, slog.New(slog.NewTextHandler(&logs, nil)))
 	service.cleanup = func(context.Context) (int64, error) {
 		return 0, errors.New("database unavailable")
 	}
 
 	service.maybeDeleteExpiredSessions(context.Background())
+
+	assert.Contains(t, logs.String(), "delete expired sessions", "cleanup failure log message")
+	assert.Contains(t, logs.String(), "database unavailable", "cleanup failure log error")
 }

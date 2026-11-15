@@ -17,7 +17,7 @@ import (
 
 func TestSetActiveHousehold(t *testing.T) {
 	pool := testdb.New(t)
-	service := auth.NewService(pool)
+	service := auth.NewService(pool, nil)
 	householdService := households.NewService(pool)
 	ctx := context.Background()
 

@@ -29,7 +29,7 @@ func New(deps Deps) (http.Handler, error) {
 		deps.Logger = slog.Default()
 	}
 
-	authService := auth.NewService(deps.DB)
+	authService := auth.NewService(deps.DB, deps.Logger)
 	householdService := households.NewService(deps.DB)
 	financeService := finance.NewService(deps.DB)
 	reportService := reporting.NewService(deps.DB, financeService)

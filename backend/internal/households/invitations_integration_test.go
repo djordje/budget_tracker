@@ -30,7 +30,7 @@ type invitationFixture struct {
 func newInvitationFixture(t *testing.T) *invitationFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	authService := auth.NewService(pool)
+	authService := auth.NewService(pool, nil)
 	service := NewService(pool)
 	ctx := context.Background()
 

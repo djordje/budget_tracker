@@ -33,7 +33,7 @@ type reportFixture struct {
 func newReportFixture(t *testing.T) *reportFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	authService := auth.NewService(pool)
+	authService := auth.NewService(pool, nil)
 	householdService := households.NewService(pool)
 	financeService := finance.NewService(pool)
 	reportingService := NewService(pool, financeService)

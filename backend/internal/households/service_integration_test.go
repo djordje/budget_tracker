@@ -28,7 +28,7 @@ type testFixture struct {
 func newFixture(t *testing.T) *testFixture {
 	t.Helper()
 	pool := testdb.New(t)
-	authService := auth.NewService(pool)
+	authService := auth.NewService(pool, nil)
 	service := NewService(pool)
 
 	user := registerUser(t, authService, "ada@example.com")
