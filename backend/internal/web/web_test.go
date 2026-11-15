@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"testing/fstest"
 
@@ -171,6 +172,46 @@ func newTestHandler(t *testing.T) *Handler {
 	})
 	require.NoError(t, err, "New()")
 	return handler
+}
+
+// serveHouseholdPage serves an authenticated GET from the admin of one
+// household that is also the session's active household.
+func serveHouseholdPage(t *testing.T, handle func(*Handler) http.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	householdID := uuid.New()
+	handler, err := New(Deps{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Sessions: stubSessions{},
+		Households: stubHouseholds{
+			households: []households.Household{{ID: householdID, Name: "Home", Role: households.RoleAdmin}},
+		},
+		Entries: stubEntries{},
+		Rates:   stubRates{},
+		Reports: stubReports{},
+	})
+	require.NoError(t, err, "New()")
+
+	userID := uuid.New()
+	session := auth.Session{
+		UserID:            userID,
+		User:              auth.User{ID: userID},
+		ActiveHouseholdID: &householdID,
+	}
+	request := httptest.NewRequest(http.MethodGet, "/app", nil)
+	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
+	recorder := httptest.NewRecorder()
+	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
+		Load(handle(handler)).ServeHTTP(recorder, request)
+	return recorder
+}
+
+// inputValue returns the value attribute rendered for the named form input.
+func inputValue(t *testing.T, body, name string) string {
+	t.Helper()
+	pattern := regexp.MustCompile(`name="` + regexp.QuoteMeta(name) + `"[^>]*value="([^"]*)"`)
+	match := pattern.FindStringSubmatch(body)
+	require.Len(t, match, 2, "input %q in body", name)
+	return match[1]
 }
 
 func TestHome(t *testing.T) {

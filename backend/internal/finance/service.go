@@ -644,9 +644,19 @@ func amountMessage(minorUnits int32) string {
 	return fmt.Sprintf("Enter a positive amount with at most %d decimal places.", minorUnits)
 }
 
+// Today returns the current UTC date at midnight. It is the single source for
+// every user-visible default date.
+func Today() time.Time {
+	return today()
+}
+
+// TodayIn returns the UTC date of now at midnight.
+func TodayIn(now time.Time) time.Time {
+	return dateOnly(now.UTC())
+}
+
 func today() time.Time {
-	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return TodayIn(time.Now())
 }
 
 func dateOnly(value time.Time) time.Time {

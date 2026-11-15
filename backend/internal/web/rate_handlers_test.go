@@ -71,3 +71,15 @@ func TestRateFormRendersValidationCopy(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "Enter a smaller rate.", "rendered validation copy")
 }
+
+func TestRateFormDefaultsToUTCDate(t *testing.T) {
+	before := finance.Today()
+	recorder := serveHouseholdPage(t, func(h *Handler) http.HandlerFunc { return h.ExchangeRatesPage })
+	// A request can straddle UTC midnight, so accept the date observed on
+	// either side of it instead of racing the clock.
+	after := finance.Today()
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	wantDates := []string{before.Format(entryDateLayout), after.Format(entryDateLayout)}
+	assert.Contains(t, wantDates, inputValue(t, recorder.Body.String(), "rate_date"), "rate date default")
+}

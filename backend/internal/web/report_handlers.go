@@ -39,15 +39,15 @@ func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := r.URL.Query()
-	now := time.Now()
-	defaultFrom := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	today := finance.Today()
+	defaultFrom := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
 	fromValue := query.Get("from")
 	if fromValue == "" {
 		fromValue = defaultFrom.Format(entryDateLayout)
 	}
 	toValue := query.Get("to")
 	if toValue == "" {
-		toValue = now.Format(entryDateLayout)
+		toValue = today.Format(entryDateLayout)
 	}
 	from, err := time.Parse(entryDateLayout, fromValue)
 	if err != nil {

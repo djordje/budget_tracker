@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"budgettracker/internal/auth"
+	"budgettracker/internal/finance"
 	"budgettracker/internal/households"
 )
 
@@ -61,4 +63,22 @@ func TestReportPageUsesReportSpecificErrors(t *testing.T) {
 			assert.NotContains(t, body, "Rate not found", "report failure used rate-specific copy:\n%s", body)
 		})
 	}
+}
+
+func TestReportDefaultsToUTCMonth(t *testing.T) {
+	before := finance.Today()
+	recorder := serveHouseholdPage(t, func(h *Handler) http.HandlerFunc { return h.ReportsPage })
+	// A request can straddle UTC midnight, so accept the dates observed on
+	// either side of it instead of racing the clock.
+	after := finance.Today()
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Contains(t, []string{before.Format(entryDateLayout), after.Format(entryDateLayout)},
+		inputValue(t, body, "to"), "to default")
+	wantMonthStarts := []string{
+		time.Date(before.Year(), before.Month(), 1, 0, 0, 0, 0, time.UTC).Format(entryDateLayout),
+		time.Date(after.Year(), after.Month(), 1, 0, 0, 0, 0, time.UTC).Format(entryDateLayout),
+	}
+	assert.Contains(t, wantMonthStarts, inputValue(t, body, "from"), "from default")
 }

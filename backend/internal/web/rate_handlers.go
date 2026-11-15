@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"budgettracker/internal/auth"
 	"budgettracker/internal/finance"
@@ -247,7 +246,7 @@ func (h *Handler) buildRatesPage(
 		values.From, values.To = defaultRatePair(currencies)
 	}
 	if values.RateDate == "" {
-		values.RateDate = time.Now().Format(entryDateLayout)
+		values.RateDate = finance.Today().Format(entryDateLayout)
 	}
 	if fieldErrors == nil {
 		fieldErrors = make(map[string]string)

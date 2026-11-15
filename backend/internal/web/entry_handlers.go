@@ -217,7 +217,7 @@ func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.
 	}
 	data.Amount = ""
 	data.CurrencyCode = defaultCurrency(view.Effective, kind)
-	data.EntryDate = time.Now().Format(entryDateLayout)
+	data.EntryDate = finance.Today().Format(entryDateLayout)
 	data.Description = ""
 	data.HouseholdWide = false
 	data.ShowAttributionChoice = data.IsAdmin

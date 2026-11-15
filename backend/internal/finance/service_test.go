@@ -3,6 +3,7 @@ package finance
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,44 @@ func TestNormalizeDescription(t *testing.T) {
 			}
 			require.NotNil(t, description, "description")
 			assert.Equal(t, tt.want, *description)
+		})
+	}
+}
+
+func TestTodayIn(t *testing.T) {
+	tests := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{
+			name: "last instant of the UTC day",
+			now:  time.Date(2026, time.October, 4, 23, 59, 59, 999999999, time.UTC),
+			want: time.Date(2026, time.October, 4, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name: "first instant of the UTC day",
+			now:  time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC),
+			want: time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name: "east of UTC on the next local day",
+			now:  time.Date(2026, time.October, 5, 10, 0, 0, 0, time.FixedZone("UTC+13", 13*60*60)),
+			want: time.Date(2026, time.October, 4, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name: "west of UTC on the previous local day",
+			now:  time.Date(2026, time.October, 4, 22, 0, 0, 0, time.FixedZone("UTC-10", -10*60*60)),
+			want: time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TodayIn(tt.now)
+
+			assert.Equal(t, tt.want, got, "TodayIn()")
+			assert.Equal(t, time.UTC, got.Location(), "location")
 		})
 	}
 }
