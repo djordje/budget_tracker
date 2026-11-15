@@ -443,15 +443,39 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finan
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
 	}
+	data, err := h.newPageData(r, "Entries")
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	if data.ActiveHousehold == nil {
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		return
+	}
+	entry, err := h.entries.Get(r.Context(), session.User.ID, kind, id)
+	if err != nil {
+		h.renderEntryDeleteFailure(w, r, kind, err)
+		return
+	}
+	if entry.HouseholdID != data.ActiveHousehold.ID {
+		h.renderEntryDeleteFailure(w, r, kind, finance.ErrNotFound)
+		return
+	}
 	if err := h.entries.Delete(r.Context(), session.User.ID, kind, id); err != nil {
-		if isHTMX(r) {
-			h.renderEntryDeleteError(w, r, kind, err)
-			return
-		}
-		h.renderEntryError(w, r, err)
+		h.renderEntryDeleteFailure(w, r, kind, err)
 		return
 	}
 	http.Redirect(w, r, entryListReturnURL(r, kind)+"&notice=entry_deleted", http.StatusSeeOther)
+}
+
+// renderEntryDeleteFailure reports a failed delete in the format the request
+// expects: an HTMX fragment or a full page, as the edit and update handlers do.
+func (h *Handler) renderEntryDeleteFailure(w http.ResponseWriter, r *http.Request, kind finance.Kind, err error) {
+	if isHTMX(r) {
+		h.renderEntryDeleteError(w, r, kind, err)
+		return
+	}
+	h.renderEntryError(w, r, err)
 }
 
 func (h *Handler) renderEntryDeleteError(w http.ResponseWriter, r *http.Request, kind finance.Kind, err error) {
