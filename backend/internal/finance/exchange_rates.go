@@ -312,16 +312,28 @@ var (
 	largeRateMessage    = &validationMessage{text: "Enter a smaller rate."}
 )
 
+// rateDecimalPlaces is the fractional precision rates are stored at
+// (numeric(18,8)).
+const rateDecimalPlaces = 8
+
+// canonicalRate returns the stored form of a rate. Only plain decimal notation
+// is accepted, matching the form copy, and the value may not need more than
+// rateDecimalPlaces decimals: exactly representable values with extra trailing
+// zeros are canonicalized instead of rejected because numeric(18,8) stores them
+// exactly.
 func canonicalRate(raw string) (string, *validationMessage) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return "", positiveRateMessage
 	}
+	if strings.ContainsAny(value, "eE") {
+		return "", rateScaleMessage
+	}
 	parsed, err := decimal.NewFromString(value)
 	if err != nil || !parsed.IsPositive() {
 		return "", positiveRateMessage
 	}
-	if parsed.Exponent() < -8 {
+	if !parsed.Equal(parsed.Round(rateDecimalPlaces)) {
 		return "", rateScaleMessage
 	}
 	if parsed.Cmp(decimal.NewFromInt(10_000_000_000)) >= 0 {
