@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func entryIDByDescription(t *testing.T, client *testClient, table, description string) int64 {
@@ -19,7 +22,7 @@ func entryIDByDescription(t *testing.T, client *testClient, table, description s
 		SELECT id FROM %s WHERE description = $1 ORDER BY created_at DESC LIMIT 1`, table),
 		description,
 	).Scan(&id); err != nil {
-		t.Fatalf("look up %s entry %q: %v", table, description, err)
+		require.NoError(t, err, "look up %s entry %q", table, description)
 	}
 	return id
 }
@@ -30,23 +33,16 @@ func TestEntryHTMLFlow(t *testing.T) {
 	homeID := createHouseholdHTML(t, client, csrf, "Home")
 
 	response, err := client.follow.Get(client.baseURL + "/app/entries")
-	if err != nil {
-		t.Fatalf("GET entries: %v", err)
-	}
+	require.NoError(t, err, "GET entries")
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "No Spending entries yet") {
-		t.Fatalf("empty entries = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "empty entries; body:\n%s", body)
+	assert.Contains(t, body, "No Spending entries yet")
 
 	response, err = client.follow.Get(client.baseURL + "/app/spendings/new")
-	if err != nil {
-		t.Fatalf("GET spending form: %v", err)
-	}
+	require.NoError(t, err, "GET spending form")
 	body = readBody(t, response)
 	for _, want := range []string{"New spending", `name="amount"`, "RSD", "Whole household"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("spending form does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "spending form")
 	}
 
 	response = client.postForm(t, "/app/spendings", url.Values{
@@ -58,24 +54,18 @@ func TestEntryHTMLFlow(t *testing.T) {
 		"attribution":   {"self"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("create spending = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "create spending; body:\n%s", body)
 	for _, want := range []string{"Entry added.", "Coffee", "-12.34 EUR"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("entries list does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "entries list")
 	}
 
 	spendingID := entryIDByDescription(t, client, "spendings", "Coffee")
 	response, err = client.follow.Get(client.baseURL + "/app/spendings/" + strconv.FormatInt(spendingID, 10) + "/edit")
-	if err != nil {
-		t.Fatalf("GET edit spending: %v", err)
-	}
+	require.NoError(t, err, "GET edit spending")
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "Coffee") || !strings.Contains(body, `value="12.34"`) {
-		t.Fatalf("edit spending = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "edit spending; body:\n%s", body)
+	assert.Contains(t, body, "Coffee")
+	assert.Contains(t, body, `value="12.34"`)
 
 	response = client.postForm(t, "/app/spendings/"+strconv.FormatInt(spendingID, 10), url.Values{
 		"csrf_token":    {csrf},
@@ -85,15 +75,15 @@ func TestEntryHTMLFlow(t *testing.T) {
 		"description":   {"Lunch"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "Entry updated.") || !strings.Contains(body, "Lunch") {
-		t.Fatalf("update spending = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "update spending; body:\n%s", body)
+	assert.Contains(t, body, "Entry updated.")
+	assert.Contains(t, body, "Lunch")
 
 	response = client.postForm(t, "/app/spendings/"+strconv.FormatInt(spendingID, 10)+"/delete", url.Values{"csrf_token": {csrf}})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "Entry deleted.") || strings.Contains(body, "Lunch") {
-		t.Fatalf("delete spending = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "delete spending; body:\n%s", body)
+	assert.Contains(t, body, "Entry deleted.")
+	assert.NotContains(t, body, "Lunch")
 
 	response = client.postForm(t, "/app/incomes", url.Values{
 		"csrf_token":    {csrf},
@@ -105,13 +95,10 @@ func TestEntryHTMLFlow(t *testing.T) {
 	readBody(t, response)
 
 	response, err = client.follow.Get(client.baseURL + "/app/entries?type=income")
-	if err != nil {
-		t.Fatalf("GET income entries: %v", err)
-	}
+	require.NoError(t, err, "GET income entries")
 	body = readBody(t, response)
-	if !strings.Contains(body, "Salary") || !strings.Contains(body, "+100.00 RSD") {
-		t.Errorf("income list missing entry:\n%s", body)
-	}
+	assert.Contains(t, body, "Salary", "income list")
+	assert.Contains(t, body, "+100.00 RSD", "income list")
 
 	// Admin-only household-wide entry.
 	response = client.postForm(t, "/app/incomes", url.Values{
@@ -124,13 +111,10 @@ func TestEntryHTMLFlow(t *testing.T) {
 	})
 	readBody(t, response)
 	response, err = client.follow.Get(client.baseURL + "/app/entries?type=income&scope=all")
-	if err != nil {
-		t.Fatalf("GET all income entries: %v", err)
-	}
+	require.NoError(t, err, "GET all income entries")
 	body = readBody(t, response)
-	if !strings.Contains(body, "Household") || !strings.Contains(body, "Rent") {
-		t.Errorf("admin all list missing household entry:\n%s", body)
-	}
+	assert.Contains(t, body, "Household", "admin all list")
+	assert.Contains(t, body, "Rent", "admin all list")
 
 	member := newTestClientWithPool(t, client.pool)
 	memberCSRF := member.registerHTML(t, "grace@example.com")
@@ -139,7 +123,7 @@ func TestEntryHTMLFlow(t *testing.T) {
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, graceID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 	response = member.postForm(t, "/app/active-household", url.Values{
 		"csrf_token":   {memberCSRF},
@@ -148,13 +132,10 @@ func TestEntryHTMLFlow(t *testing.T) {
 	readBody(t, response)
 
 	response, err = member.follow.Get(member.baseURL + "/app/spendings/new")
-	if err != nil {
-		t.Fatalf("member GET spending form: %v", err)
-	}
+	require.NoError(t, err, "member GET spending form")
 	body = readBody(t, response)
-	if strings.Contains(body, "Whole household") || !strings.Contains(body, "Your entry") {
-		t.Errorf("member spending form attribution:\n%s", body)
-	}
+	assert.NotContains(t, body, "Whole household", "member spending form attribution")
+	assert.Contains(t, body, "Your entry", "member spending form attribution")
 
 	response = member.postForm(t, "/app/spendings", url.Values{
 		"csrf_token":    {memberCSRF},
@@ -165,9 +146,8 @@ func TestEntryHTMLFlow(t *testing.T) {
 		"attribution":   {"household"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusForbidden || !strings.Contains(body, "do not have permission") {
-		t.Fatalf("member household-wide create = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusForbidden, response.StatusCode, "member household-wide create; body:\n%s", body)
+	assert.Contains(t, body, "do not have permission")
 
 	response = member.postForm(t, "/app/spendings", url.Values{
 		"csrf_token":    {memberCSRF},
@@ -180,22 +160,14 @@ func TestEntryHTMLFlow(t *testing.T) {
 	memberSpendingID := entryIDByDescription(t, member, "spendings", "Member coffee")
 
 	response, err = client.follow.Get(client.baseURL + "/app/spendings/" + strconv.FormatInt(memberSpendingID, 10) + "/edit")
-	if err != nil {
-		t.Fatalf("admin GET member entry edit: %v", err)
-	}
+	require.NoError(t, err, "admin GET member entry edit")
 	response.Body.Close()
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("admin edit member entry = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "admin edit member entry")
 
 	response, err = member.follow.Get(member.baseURL + "/app/incomes/" + strconv.FormatInt(entryIDByDescription(t, client, "incomes", "Salary"), 10) + "/edit")
-	if err != nil {
-		t.Fatalf("member GET admin entry edit: %v", err)
-	}
+	require.NoError(t, err, "member GET admin entry edit")
 	response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("member edit admin entry = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "member edit admin entry")
 
 	// Validation preserves values and reports the amount error.
 	response = member.postForm(t, "/app/spendings", url.Values{
@@ -206,11 +178,9 @@ func TestEntryHTMLFlow(t *testing.T) {
 		"description":   {"Too precise"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusUnprocessableEntity ||
-		!strings.Contains(body, "at most 2 decimal places") ||
-		!strings.Contains(body, "Too precise") {
-		t.Fatalf("invalid amount = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid amount; body:\n%s", body)
+	assert.Contains(t, body, "at most 2 decimal places")
+	assert.Contains(t, body, "Too precise")
 }
 
 func TestEntryHTMLRequiresHouseholdAndCSRF(t *testing.T) {
@@ -218,22 +188,17 @@ func TestEntryHTMLRequiresHouseholdAndCSRF(t *testing.T) {
 	csrf := client.registerHTML(t, "ada@example.com")
 
 	response, err := client.noRedirect.Get(client.baseURL + "/app/spendings/new")
-	if err != nil {
-		t.Fatalf("GET spending form without household: %v", err)
-	}
+	require.NoError(t, err, "GET spending form without household")
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/app" {
-		t.Errorf("no-household form = %d %q, want 303 /app", response.StatusCode, response.Header.Get("Location"))
-	}
+	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "no-household form")
+	assert.Equal(t, "/app", response.Header.Get("Location"), "Location")
 
 	createHouseholdHTML(t, client, csrf, "Home")
 	response = client.postForm(t, "/app/spendings", url.Values{
 		"amount": {"1"}, "currency_code": {"RSD"}, "entry_date": {"2026-10-01"},
 	})
 	response.Body.Close()
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("missing CSRF = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "missing CSRF")
 }
 
 func TestEntryHTMLPaginationAndFilters(t *testing.T) {
@@ -248,69 +213,50 @@ func TestEntryHTMLPaginationAndFilters(t *testing.T) {
 			VALUES ($1, $2, 100, 'RSD', $3::date, $4)`,
 			homeID, userID, fmt.Sprintf("2026-09-%02d", i+1), fmt.Sprintf("Bulk %02d", i),
 		); err != nil {
-			t.Fatalf("insert bulk entry: %v", err)
+			require.NoError(t, err, "insert bulk entry")
 		}
 	}
 
 	response, err := client.follow.Get(client.baseURL + "/app/entries?type=spending")
-	if err != nil {
-		t.Fatalf("GET entries page 1: %v", err)
-	}
+	require.NoError(t, err, "GET entries page 1")
 	body := readBody(t, response)
 	for _, want := range []string{"Page 1 of 2", "Next", "Bulk 20"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("page 1 does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "page 1")
 	}
 
 	response, err = client.follow.Get(client.baseURL + "/app/entries?type=spending&page=2")
-	if err != nil {
-		t.Fatalf("GET entries page 2: %v", err)
-	}
+	require.NoError(t, err, "GET entries page 2")
 	body = readBody(t, response)
 	for _, want := range []string{"Page 2 of 2", "Previous", "Bulk 00"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("page 2 does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "page 2")
 	}
 
 	response, err = client.follow.Get(client.baseURL + "/app/entries?type=spending&from=2026-09-01&to=2026-09-01")
-	if err != nil {
-		t.Fatalf("GET filtered entries: %v", err)
-	}
+	require.NoError(t, err, "GET filtered entries")
 	body = readBody(t, response)
-	if !strings.Contains(body, "Bulk 00") || strings.Contains(body, "Bulk 01") {
-		t.Errorf("date filter did not isolate one entry:\n%s", body)
-	}
+	assert.Contains(t, body, "Bulk 00", "date filter")
+	assert.NotContains(t, body, "Bulk 01", "date filter did not isolate one entry")
 }
 
 func (c *testClient) postFormHTMXNoRedirect(t *testing.T, path string, values url.Values) *http.Response {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodPost, c.baseURL+path, strings.NewReader(values.Encode()))
-	if err != nil {
-		t.Fatalf("create HTMX POST request: %v", err)
-	}
+	require.NoError(t, err, "create HTMX POST request")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("HX-Request", "true")
 	response, err := c.noRedirect.Do(request)
-	if err != nil {
-		t.Fatalf("HTMX POST %s: %v", path, err)
-	}
+	require.NoError(t, err, "HTMX POST %s", path)
 	return response
 }
 
 func (c *testClient) postFormHTMX(t *testing.T, path string, values url.Values) *http.Response {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodPost, c.baseURL+path, strings.NewReader(values.Encode()))
-	if err != nil {
-		t.Fatalf("create HTMX POST request: %v", err)
-	}
+	require.NoError(t, err, "create HTMX POST request")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("HX-Request", "true")
 	response, err := c.follow.Do(request)
-	if err != nil {
-		t.Fatalf("HTMX POST %s: %v", path, err)
-	}
+	require.NoError(t, err, "HTMX POST %s", path)
 	return response
 }
 
@@ -327,12 +273,10 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"description":   {"HTMX coffee"},
 	})
 	response.Body.Close()
-	if response.StatusCode != http.StatusNoContent {
-		t.Fatalf("HTMX create = %d, want 204", response.StatusCode)
-	}
-	if redirect := response.Header.Get("HX-Redirect"); !strings.Contains(redirect, "/app/entries?") || !strings.Contains(redirect, "notice=entry_created") {
-		t.Errorf("HX-Redirect = %q", redirect)
-	}
+	require.Equal(t, http.StatusNoContent, response.StatusCode, "HTMX create")
+	redirect := response.Header.Get("HX-Redirect")
+	assert.Contains(t, redirect, "/app/entries?", "HX-Redirect")
+	assert.Contains(t, redirect, "notice=entry_created", "HX-Redirect")
 
 	response = client.postFormHTMX(t, "/app/spendings", url.Values{
 		"csrf_token":    {csrf},
@@ -342,17 +286,11 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"description":   {"Invalid HTMX coffee"},
 	})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("HTMX validation = %d, want 200", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "HTMX validation")
 	for _, want := range []string{`id="entry-form"`, "at most 2 decimal places", "Invalid HTMX coffee"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("HTMX validation body does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "HTMX validation body")
 	}
-	if strings.Contains(body, "<html") {
-		t.Error("HTMX validation returned a full page instead of a form fragment")
-	}
+	assert.NotContains(t, body, "<html", "HTMX validation returned a full page instead of a form fragment")
 
 	entryID := entryIDByDescription(t, client, "spendings", "HTMX coffee")
 	response = client.postFormHTMX(t, "/app/spendings/"+strconv.FormatInt(entryID, 10), url.Values{
@@ -363,37 +301,26 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"description":   {"HTMX lunch"},
 	})
 	response.Body.Close()
-	if response.StatusCode != http.StatusNoContent {
-		t.Fatalf("HTMX update = %d, want 204", response.StatusCode)
-	}
-	if redirect := response.Header.Get("HX-Redirect"); !strings.Contains(redirect, "notice=entry_updated") {
-		t.Errorf("HX-Redirect update = %q", redirect)
-	}
+	require.Equal(t, http.StatusNoContent, response.StatusCode, "HTMX update")
+	assert.Contains(t, response.Header.Get("HX-Redirect"), "notice=entry_updated", "HX-Redirect")
 
 	response = client.postFormHTMXNoRedirect(t, "/app/spendings/"+strconv.FormatInt(entryID, 10)+"/delete", url.Values{
 		"csrf_token":  {csrf},
 		"return_page": {"1"},
 	})
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther {
-		t.Fatalf("HTMX delete = %d, want %d", response.StatusCode, http.StatusSeeOther)
-	}
-	if redirect := response.Header.Get("Location"); !strings.Contains(redirect, "notice=entry_deleted") ||
-		!strings.Contains(redirect, "type=spending") {
-		t.Errorf("delete Location = %q", redirect)
-	}
+	require.Equal(t, http.StatusSeeOther, response.StatusCode, "HTMX delete")
+	redirect = response.Header.Get("Location")
+	assert.Contains(t, redirect, "notice=entry_deleted", "delete Location")
+	assert.Contains(t, redirect, "type=spending", "delete Location")
 
 	response = client.postFormHTMXNoRedirect(t, "/app/spendings/"+strconv.FormatInt(entryID, 10)+"/delete", url.Values{
 		"csrf_token": {csrf},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusNotFound {
-		t.Fatalf("HTMX delete missing = %d, want %d", response.StatusCode, http.StatusNotFound)
-	}
-	if !strings.Contains(body, `id="entries-content"`) || !strings.Contains(body, "no longer available") {
-		t.Errorf("delete failure fragment = %q", body)
-	}
-	if strings.Contains(body, "entry_deleted") || strings.Contains(body, "Back to entries") == false {
-		t.Errorf("delete failure fragment advertised success: %q", body)
-	}
+	require.Equal(t, http.StatusNotFound, response.StatusCode, "HTMX delete missing; body = %q", body)
+	assert.Contains(t, body, `id="entries-content"`, "delete failure fragment")
+	assert.Contains(t, body, "no longer available", "delete failure fragment")
+	assert.NotContains(t, body, "entry_deleted", "delete failure fragment advertised success")
+	assert.Contains(t, body, "Back to entries")
 }

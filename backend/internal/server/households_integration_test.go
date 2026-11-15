@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -66,16 +69,12 @@ func (c *testClient) apiRequest(t *testing.T, method, path string, body any, csr
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
-		if err != nil {
-			t.Fatalf("marshal request body: %v", err)
-		}
+		require.NoError(t, err, "marshal request body")
 		reader = bytes.NewReader(encoded)
 	}
 
 	request, err := http.NewRequest(method, c.baseURL+path, reader)
-	if err != nil {
-		t.Fatalf("create API request: %v", err)
-	}
+	require.NoError(t, err, "create API request")
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -84,9 +83,7 @@ func (c *testClient) apiRequest(t *testing.T, method, path string, body any, csr
 	}
 
 	response, err := c.follow.Do(request)
-	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
-	}
+	require.NoError(t, err, "%s %s", method, path)
 	return response
 }
 
@@ -96,19 +93,17 @@ func (c *testClient) registerHTML(t *testing.T, email string) string {
 	values := registerForm(csrf)
 	values.Set("email", email)
 	response := c.postForm(t, "/register", values)
-	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("register %s = %d, body:\n%s", email, response.StatusCode, body)
+	if !assert.Equal(t, http.StatusOK, response.StatusCode, "register %s", email) {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
+	readBody(t, response)
 	return csrf
 }
 
 func decodeBody(t *testing.T, response *http.Response, destination any) {
 	t.Helper()
 	defer response.Body.Close()
-	if err := json.NewDecoder(response.Body).Decode(destination); err != nil {
-		t.Fatalf("decode response body: %v", err)
-	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(destination), "decode response body")
 }
 
 func userIDByEmail(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
@@ -117,7 +112,7 @@ func userIDByEmail(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
 	if err := pool.QueryRow(context.Background(), `
 		SELECT user_id FROM auth_credentials WHERE email_normalized = $1`, email,
 	).Scan(&id); err != nil {
-		t.Fatalf("look up user %s: %v", email, err)
+		require.NoError(t, err, "look up user %s", email)
 	}
 	return id
 }
@@ -134,60 +129,41 @@ func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 	graceCSRF := grace.registerHTML(t, "grace@example.com")
 
 	response := ada.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]string{"name": "  Home  "}, adaCSRF)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("create household status = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusCreated, response.StatusCode, "create household status") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
-	if location := response.Header.Get("Location"); location == "" {
-		t.Error("create household response has no Location header")
-	}
+	assert.NotEmpty(t, response.Header.Get("Location"), "create household response has no Location header")
 	var created householdEnvelope
 	decodeBody(t, response, &created)
-	if created.Household.Name != "Home" || created.Household.Role != "admin" {
-		t.Errorf("created household = %+v", created.Household)
-	}
-	if created.Household.ID == "" || created.Household.CreatedAt == "" {
-		t.Errorf("created household is missing fields: %+v", created.Household)
-	}
+	assert.Equal(t, "Home", created.Household.Name, "created household = %+v", created.Household)
+	assert.Equal(t, "admin", created.Household.Role, "created household = %+v", created.Household)
+	assert.NotEmpty(t, created.Household.ID, "created household = %+v", created.Household)
+	assert.NotEmpty(t, created.Household.CreatedAt, "created household = %+v", created.Household)
 	homeID, err := uuid.Parse(created.Household.ID)
-	if err != nil {
-		t.Fatalf("parse created household ID: %v", err)
-	}
+	require.NoError(t, err, "parse created household ID")
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("list households status = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "list households status")
 	var listed householdsEnvelope
 	decodeBody(t, response, &listed)
-	if len(listed.Households) != 1 || listed.Households[0].ID != homeID.String() {
-		t.Errorf("listed households = %+v", listed.Households)
-	}
+	require.Len(t, listed.Households, 1, "listed households")
+	assert.Equal(t, homeID.String(), listed.Households[0].ID, "listed households = %+v", listed.Households)
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String(), nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("get household status = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "get household status")
 	var fetched householdEnvelope
 	decodeBody(t, response, &fetched)
-	if fetched.Household.ID != homeID.String() {
-		t.Errorf("fetched household ID = %q", fetched.Household.ID)
-	}
+	assert.Equal(t, homeID.String(), fetched.Household.ID, "fetched household ID")
 
 	response = grace.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]string{"name": "Other home"}, graceCSRF)
 	var graceCreated householdEnvelope
 	decodeBody(t, response, &graceCreated)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("create other household status = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusCreated, response.StatusCode, "create other household status")
 	otherID, err := uuid.Parse(graceCreated.Household.ID)
-	if err != nil {
-		t.Fatalf("parse other household ID: %v", err)
-	}
+	require.NoError(t, err, "parse other household ID")
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+otherID.String(), nil, "")
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("cross-household get status = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "cross-household get status")
 	response.Body.Close()
 
 	graceID := userIDByEmail(t, pool, "grace@example.com")
@@ -195,78 +171,51 @@ func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, graceID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	response = grace.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String(), nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("member get household status = %d, want 200", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "member get household status")
 	var memberView householdEnvelope
 	decodeBody(t, response, &memberView)
-	if memberView.Household.Role != "member" {
-		t.Errorf("member role = %q, want member", memberView.Household.Role)
-	}
+	assert.Equal(t, "member", memberView.Household.Role, "member role")
 
 	response = grace.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/members", nil, "")
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("member list members status = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member list members status")
 	response.Body.Close()
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/members", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("admin list members status = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "admin list members status")
 	var members membersEnvelope
 	decodeBody(t, response, &members)
-	if len(members.Members) != 2 {
-		t.Errorf("member count = %d, want 2", len(members.Members))
-	}
+	assert.Len(t, members.Members, 2, "member count")
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/options", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("get options status = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "get options status")
 	var options optionsEnvelope
 	decodeBody(t, response, &options)
-	if options.Options.DefaultIncomeCurrencyCode != "RSD" {
-		t.Errorf("default income currency = %q", options.Options.DefaultIncomeCurrencyCode)
-	}
+	assert.Equal(t, "RSD", options.Options.DefaultIncomeCurrencyCode, "default income currency")
 
 	response = ada.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]string{"name": ""}, adaCSRF)
-	if response.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("invalid household status = %d, want 422", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid household status")
 	var validation errorEnvelope
 	decodeBody(t, response, &validation)
-	if validation.Error.Code != "validation_failed" || validation.Error.Fields["name"] == "" {
-		t.Errorf("validation error = %+v", validation.Error)
-	}
+	assert.Equal(t, "validation_failed", validation.Error.Code, "validation error = %+v", validation.Error)
+	assert.NotEmpty(t, validation.Error.Fields["name"], "validation error = %+v", validation.Error)
 
 	response = ada.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]string{"name": "No CSRF"}, "")
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("missing CSRF status = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "missing CSRF status")
 	var csrfError errorEnvelope
 	decodeBody(t, response, &csrfError)
-	if csrfError.Error.Code != "csrf_failed" {
-		t.Errorf("CSRF error code = %q", csrfError.Error.Code)
-	}
+	assert.Equal(t, "csrf_failed", csrfError.Error.Code, "CSRF error code")
 
 	response = guest.apiRequest(t, http.MethodGet, "/api/v1/households", nil, "")
-	if response.StatusCode != http.StatusUnauthorized {
-		t.Errorf("unauthenticated list status = %d, want 401", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusUnauthorized, response.StatusCode, "unauthenticated list status")
 	var unauthorized errorEnvelope
 	decodeBody(t, response, &unauthorized)
-	if unauthorized.Error.Code != "unauthenticated" {
-		t.Errorf("unauthenticated error code = %q", unauthorized.Error.Code)
-	}
+	assert.Equal(t, "unauthenticated", unauthorized.Error.Code, "unauthenticated error code")
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/not-a-uuid", nil, "")
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("invalid household ID status = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "invalid household ID status")
 	response.Body.Close()
 }

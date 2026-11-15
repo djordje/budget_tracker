@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgettracker/internal/httpapi"
@@ -38,16 +41,12 @@ func newTestClientWithPool(t *testing.T, pool *pgxpool.Pool) *testClient {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		DB:     pool,
 	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	require.NoError(t, err, "New()")
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
 	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("create cookie jar: %v", err)
-	}
+	require.NoError(t, err, "create cookie jar")
 
 	return &testClient{
 		baseURL: server.URL,
@@ -69,30 +68,24 @@ func newTestClientWithPool(t *testing.T, pool *pgxpool.Pool) *testClient {
 func (c *testClient) csrfToken(t *testing.T, path string) string {
 	t.Helper()
 	response, err := c.follow.Get(c.baseURL + path)
-	if err != nil {
-		t.Fatalf("GET %s: %v", path, err)
-	}
+	require.NoError(t, err, "GET %s", path)
 	response.Body.Close()
 
 	baseURL, err := url.Parse(c.baseURL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
+	require.NoError(t, err, "parse server URL")
 	for _, cookie := range c.jar.Cookies(baseURL) {
 		if cookie.Name == httpapi.DefaultCSRFCookieName {
 			return cookie.Value
 		}
 	}
-	t.Fatal("CSRF cookie was not set")
+	require.FailNow(t, "CSRF cookie was not set")
 	return ""
 }
 
 func (c *testClient) sessionCookie(t *testing.T) *http.Cookie {
 	t.Helper()
 	baseURL, err := url.Parse(c.baseURL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
+	require.NoError(t, err, "parse server URL")
 	for _, cookie := range c.jar.Cookies(baseURL) {
 		if cookie.Name == "bt_session" {
 			return cookie
@@ -104,14 +97,10 @@ func (c *testClient) sessionCookie(t *testing.T) *http.Cookie {
 func (c *testClient) postForm(t *testing.T, path string, values url.Values) *http.Response {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodPost, c.baseURL+path, strings.NewReader(values.Encode()))
-	if err != nil {
-		t.Fatalf("create POST request: %v", err)
-	}
+	require.NoError(t, err, "create POST request")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := c.follow.Do(request)
-	if err != nil {
-		t.Fatalf("POST %s: %v", path, err)
-	}
+	require.NoError(t, err, "POST %s", path)
 	return response
 }
 
@@ -119,9 +108,7 @@ func readBody(t *testing.T, response *http.Response) string {
 	t.Helper()
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
+	require.NoError(t, err, "read response body")
 	return string(body)
 }
 
@@ -140,46 +127,31 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 	client := newTestClient(t)
 
 	response, err := client.noRedirect.Get(client.baseURL + "/app")
-	if err != nil {
-		t.Fatalf("GET /app: %v", err)
-	}
+	require.NoError(t, err, "GET /app")
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/login" {
-		t.Fatalf("GET /app = %d %q, want 303 /login", response.StatusCode, response.Header.Get("Location"))
-	}
+	require.Equal(t, http.StatusSeeOther, response.StatusCode)
+	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 
 	csrf := client.csrfToken(t, "/register")
 	response = client.postForm(t, "/register", registerForm(csrf))
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST /register status = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "body:\n%s", body)
 	for _, want := range []string{"Welcome, Ada.", "Create household"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("dashboard does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "dashboard")
 	}
-	if client.sessionCookie(t) == nil {
-		t.Fatal("registration did not set a session cookie")
-	}
+	assert.NotNil(t, client.sessionCookie(t), "registration did not set a session cookie")
 
 	response = client.postForm(t, "/logout", url.Values{"csrf_token": {csrf}})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "You have been signed out.") {
-		t.Fatalf("POST /logout status = %d, body:\n%s", response.StatusCode, body)
-	}
-	if client.sessionCookie(t) != nil {
-		t.Fatal("logout did not clear the session cookie")
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "You have been signed out.")
+	assert.Nil(t, client.sessionCookie(t), "logout did not clear the session cookie")
 
 	response, err = client.noRedirect.Get(client.baseURL + "/app")
-	if err != nil {
-		t.Fatalf("GET /app after logout: %v", err)
-	}
+	require.NoError(t, err, "GET /app after logout")
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/login" {
-		t.Fatalf("GET /app after logout = %d %q, want 303 /login", response.StatusCode, response.Header.Get("Location"))
-	}
+	require.Equal(t, http.StatusSeeOther, response.StatusCode, "GET /app after logout")
+	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 
 	csrf = client.csrfToken(t, "/login")
 	response = client.postForm(t, "/login", url.Values{
@@ -188,9 +160,8 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 		"password":   {"wrong password"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Email or password is incorrect.") {
-		t.Fatalf("POST /login wrong password = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "Email or password is incorrect.")
 
 	response = client.postForm(t, "/login", url.Values{
 		"csrf_token": {csrf},
@@ -198,12 +169,9 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 		"password":   {"correct horse battery staple"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "Welcome, Ada.") {
-		t.Fatalf("POST /login status = %d, body:\n%s", response.StatusCode, body)
-	}
-	if client.sessionCookie(t) == nil {
-		t.Fatal("login did not set a session cookie")
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "Welcome, Ada.")
+	assert.NotNil(t, client.sessionCookie(t), "login did not set a session cookie")
 }
 
 func TestRegistrationValidationAndDuplicateEmail(t *testing.T) {
@@ -214,12 +182,9 @@ func TestRegistrationValidationAndDuplicateEmail(t *testing.T) {
 	values.Set("password_confirm", "different password")
 	response := client.postForm(t, "/register", values)
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Passwords do not match.") {
-		t.Fatalf("mismatched password = %d, body:\n%s", response.StatusCode, body)
-	}
-	if client.sessionCookie(t) != nil {
-		t.Fatal("failed registration created a session")
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "Passwords do not match.")
+	assert.Nil(t, client.sessionCookie(t), "failed registration created a session")
 
 	values = registerForm(csrf)
 	response = client.postForm(t, "/register", values)
@@ -230,9 +195,8 @@ func TestRegistrationValidationAndDuplicateEmail(t *testing.T) {
 
 	response = client.postForm(t, "/register", registerForm(csrf))
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "already exists") {
-		t.Fatalf("duplicate registration = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "already exists")
 }
 
 func TestCSRFIsRequired(t *testing.T) {
@@ -243,9 +207,7 @@ func TestCSRFIsRequired(t *testing.T) {
 		"password": {"correct horse battery staple"},
 	})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusForbidden {
-		t.Fatalf("login without CSRF = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusForbidden, response.StatusCode, "body:\n%s", body)
 }
 
 func TestAuthenticatedVisitorsAreRedirectedFromAuthPages(t *testing.T) {
@@ -255,13 +217,10 @@ func TestAuthenticatedVisitorsAreRedirectedFromAuthPages(t *testing.T) {
 	readBody(t, response)
 
 	response, err := client.noRedirect.Get(client.baseURL + "/login")
-	if err != nil {
-		t.Fatalf("GET /login: %v", err)
-	}
+	require.NoError(t, err, "GET /login")
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/app" {
-		t.Errorf("GET /login = %d %q, want 303 /app", response.StatusCode, response.Header.Get("Location"))
-	}
+	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "GET /login")
+	assert.Equal(t, "/app", response.Header.Get("Location"), "Location")
 }
 
 func TestLoginThrottle(t *testing.T) {
@@ -278,9 +237,7 @@ func TestLoginThrottle(t *testing.T) {
 			"password":   {"wrong password"},
 		})
 		body := readBody(t, response)
-		if response.StatusCode != http.StatusUnprocessableEntity {
-			t.Fatalf("attempt %d = %d, body:\n%s", i+1, response.StatusCode, body)
-		}
+		require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "attempt %d, body:\n%s", i+1, body)
 	}
 	response = client.postForm(t, "/login", url.Values{
 		"csrf_token": {csrf},
@@ -288,10 +245,7 @@ func TestLoginThrottle(t *testing.T) {
 		"password":   {"correct horse battery staple"},
 	})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusTooManyRequests || !strings.Contains(body, "Too many sign-in attempts") {
-		t.Fatalf("throttled login = %d, body:\n%s", response.StatusCode, body)
-	}
-	if response.Header.Get("Retry-After") != "900" {
-		t.Errorf("Retry-After = %q", response.Header.Get("Retry-After"))
-	}
+	require.Equal(t, http.StatusTooManyRequests, response.StatusCode, "body:\n%s", body)
+	assert.Contains(t, body, "Too many sign-in attempts")
+	assert.Equal(t, "900", response.Header.Get("Retry-After"), "Retry-After")
 }

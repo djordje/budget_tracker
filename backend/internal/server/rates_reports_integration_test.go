@@ -8,6 +8,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"budgettracker/internal/testdb"
 )
 
@@ -61,8 +64,8 @@ type summaryEnvelope struct {
 func createRateAPI(t *testing.T, client *testClient, csrf string, body map[string]any) rateEnvelope {
 	t.Helper()
 	response := client.apiRequest(t, http.MethodPost, "/api/v1/exchange-rates", body, csrf)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("create rate = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusCreated, response.StatusCode, "create rate") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
 	var created rateEnvelope
 	decodeBody(t, response, &created)
@@ -77,14 +80,10 @@ func TestExchangeRateAPI(t *testing.T) {
 	createAPIHousehold(t, admin, adminCSRF, "Home")
 
 	response := admin.apiRequest(t, http.MethodGet, "/api/v1/exchange-rates", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("list rates = %d", response.StatusCode)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "list rates")
 	var empty ratesEnvelope
 	decodeBody(t, response, &empty)
-	if len(empty.Rates) != 0 {
-		t.Errorf("initial rates = %+v", empty.Rates)
-	}
+	assert.Empty(t, empty.Rates, "initial rates")
 
 	exact := createRateAPI(t, admin, adminCSRF, map[string]any{
 		"from_currency_code": "eur",
@@ -92,9 +91,9 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate":               "117.25",
 		"rate_date":          "2026-10-15",
 	})
-	if exact.Rate.FromCurrencyCode != "EUR" || exact.Rate.ToCurrencyCode != "RSD" || exact.Rate.IsMonthly {
-		t.Errorf("exact rate = %+v", exact.Rate)
-	}
+	assert.Equal(t, "EUR", exact.Rate.FromCurrencyCode, "exact rate = %+v", exact.Rate)
+	assert.Equal(t, "RSD", exact.Rate.ToCurrencyCode, "exact rate = %+v", exact.Rate)
+	assert.False(t, exact.Rate.IsMonthly, "exact rate = %+v", exact.Rate)
 
 	monthly := createRateAPI(t, admin, adminCSRF, map[string]any{
 		"from_currency_code": "USD",
@@ -103,9 +102,8 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate_date":          "2026-10-22",
 		"is_monthly":         true,
 	})
-	if !monthly.Rate.IsMonthly || monthly.Rate.RateDate != "2026-10-01" {
-		t.Errorf("monthly rate = %+v", monthly.Rate)
-	}
+	assert.True(t, monthly.Rate.IsMonthly, "monthly rate = %+v", monthly.Rate)
+	assert.Equal(t, "2026-10-01", monthly.Rate.RateDate, "monthly rate = %+v", monthly.Rate)
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/exchange-rates", map[string]any{
 		"from_currency_code": "EUR",
@@ -113,21 +111,15 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate":               "118",
 		"rate_date":          "2026-10-15",
 	}, adminCSRF)
-	if response.StatusCode != http.StatusConflict {
-		t.Errorf("duplicate rate = %d, want 409", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusConflict, response.StatusCode, "duplicate rate")
 	var conflict errorEnvelope
 	decodeBody(t, response, &conflict)
-	if conflict.Error.Code != "rate_exists" {
-		t.Errorf("conflict code = %q", conflict.Error.Code)
-	}
+	assert.Equal(t, "rate_exists", conflict.Error.Code, "conflict code")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/exchange-rates", nil, "")
 	var listed ratesEnvelope
 	decodeBody(t, response, &listed)
-	if len(listed.Rates) != 2 {
-		t.Errorf("rate count = %d, want 2", len(listed.Rates))
-	}
+	assert.Len(t, listed.Rates, 2, "rate count")
 
 	rateID := exact.Rate.ID
 	response = admin.apiRequest(t, http.MethodPatch, "/api/v1/exchange-rates/"+rateID, map[string]any{
@@ -135,9 +127,8 @@ func TestExchangeRateAPI(t *testing.T) {
 	}, adminCSRF)
 	var updated rateEnvelope
 	decodeBody(t, response, &updated)
-	if response.StatusCode != http.StatusOK || updated.Rate.Rate != "120.5" {
-		t.Errorf("update rate = %d, %q", response.StatusCode, updated.Rate.Rate)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "update rate = %+v", updated.Rate)
+	assert.Equal(t, "120.5", updated.Rate.Rate, "update rate")
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/exchange-rates", map[string]any{
 		"from_currency_code": "EUR",
@@ -145,24 +136,18 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate":               "1",
 		"rate_date":          "2026-10-15",
 	}, adminCSRF)
-	if response.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("same currency rate = %d, want 422", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "same currency rate")
 	response.Body.Close()
 
 	outsiderCSRF := outsider.registerHTML(t, "outsider@example.com")
 	response = outsider.apiRequest(t, http.MethodPatch, "/api/v1/exchange-rates/"+rateID, map[string]any{
 		"rate": "1",
 	}, outsiderCSRF)
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("outsider update = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider update")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/exchange-rates/"+rateID, nil, adminCSRF)
-	if response.StatusCode != http.StatusNoContent {
-		t.Errorf("delete rate = %d, want 204", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNoContent, response.StatusCode, "delete rate")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/exchange-rates", map[string]any{
@@ -171,9 +156,7 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate":               "1",
 		"rate_date":          "2026-10-15",
 	}, "")
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("rate without CSRF = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "rate without CSRF")
 	response.Body.Close()
 }
 
@@ -190,7 +173,7 @@ func TestSummaryAPI(t *testing.T) {
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, memberID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 	response := member.postForm(t, "/app/active-household", url.Values{
 		"csrf_token":   {memberCSRF},
@@ -218,32 +201,27 @@ func TestSummaryAPI(t *testing.T) {
 	})
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31&currency=RSD", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("summary = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusOK, response.StatusCode, "summary") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
 	var summary summaryEnvelope
 	decodeBody(t, response, &summary)
-	if summary.Summary.IncomeMinor != 210000 || summary.Summary.SpendingMinor != 117500 || summary.Summary.NetMinor != 92500 {
-		t.Errorf("summary totals = %+v", summary.Summary)
-	}
-	if !summary.Summary.Complete || summary.Summary.EntryCount != 3 {
-		t.Errorf("summary completeness = %+v", summary.Summary)
-	}
-	if summary.Summary.Income != "2100.00" || summary.Summary.Net != "925.00" {
-		t.Errorf("formatted summary = %+v", summary.Summary)
-	}
+	assert.Equal(t, int64(210000), summary.Summary.IncomeMinor, "summary = %+v", summary.Summary)
+	assert.Equal(t, int64(117500), summary.Summary.SpendingMinor, "summary = %+v", summary.Summary)
+	assert.Equal(t, int64(92500), summary.Summary.NetMinor, "summary = %+v", summary.Summary)
+	assert.True(t, summary.Summary.Complete, "summary = %+v", summary.Summary)
+	assert.Equal(t, 3, summary.Summary.EntryCount, "summary = %+v", summary.Summary)
+	assert.Equal(t, "2100.00", summary.Summary.Income, "summary = %+v", summary.Summary)
+	assert.Equal(t, "925.00", summary.Summary.Net, "summary = %+v", summary.Summary)
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=mine&from=2026-10-01&to=2026-10-31&currency=RSD", nil, "")
 	var mine summaryEnvelope
 	decodeBody(t, response, &mine)
-	if mine.Summary.IncomeMinor != 10000 || mine.Summary.SpendingMinor != 117500 {
-		t.Errorf("admin mine = %+v", mine.Summary)
-	}
+	assert.Equal(t, int64(10000), mine.Summary.IncomeMinor, "admin mine = %+v", mine.Summary)
+	assert.Equal(t, int64(117500), mine.Summary.SpendingMinor, "admin mine = %+v", mine.Summary)
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31", nil, "")
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("member all summary = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member all summary")
 	response.Body.Close()
 
 	createEntryAPI(t, admin, adminCSRF, "/api/v1/spendings", map[string]any{
@@ -252,37 +230,27 @@ func TestSummaryAPI(t *testing.T) {
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31&currency=RSD", nil, "")
 	var incomplete summaryEnvelope
 	decodeBody(t, response, &incomplete)
-	if incomplete.Summary.Complete || incomplete.Summary.MissingEntryCount != 1 || len(incomplete.Summary.MissingRates) != 1 {
-		t.Errorf("incomplete summary = %+v", incomplete.Summary)
-	}
-	if incomplete.Summary.MissingRates[0].FromCurrencyCode != "GBP" ||
-		incomplete.Summary.MissingRates[0].EntryDate != "2026-10-15" {
-		t.Errorf("missing rate = %+v", incomplete.Summary.MissingRates)
-	}
+	assert.False(t, incomplete.Summary.Complete, "incomplete summary = %+v", incomplete.Summary)
+	assert.Equal(t, 1, incomplete.Summary.MissingEntryCount, "incomplete summary = %+v", incomplete.Summary)
+	require.Len(t, incomplete.Summary.MissingRates, 1, "incomplete summary = %+v", incomplete.Summary)
+	assert.Equal(t, "GBP", incomplete.Summary.MissingRates[0].FromCurrencyCode, "missing rate")
+	assert.Equal(t, "2026-10-15", incomplete.Summary.MissingRates[0].EntryDate, "missing rate")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?household_id="+homeID.String()+"&scope=all&from=2026-10-01&to=2026-10-31", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("explicit household summary = %d", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "explicit household summary")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all", nil, "")
-	if response.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("missing summary dates = %d, want 422", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "missing summary dates")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=team&from=2026-10-01&to=2026-10-31", nil, "")
-	if response.StatusCode != http.StatusBadRequest {
-		t.Errorf("invalid summary scope = %d, want 400", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "invalid summary scope")
 	response.Body.Close()
 
 	noHousehold := newTestClientWithPool(t, pool)
 	noHousehold.registerHTML(t, "no-household@example.com")
 	response = noHousehold.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?from=2026-10-01&to=2026-10-31", nil, "")
-	if response.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("summary without household = %d, want 422", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "summary without household")
 	response.Body.Close()
 }

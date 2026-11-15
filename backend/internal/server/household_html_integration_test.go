@@ -6,8 +6,10 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
 )
@@ -19,12 +21,8 @@ func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uu
 		"name":       {name},
 	})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("create household = %d, body:\n%s", response.StatusCode, body)
-	}
-	if !strings.Contains(body, "Household created.") {
-		t.Errorf("dashboard does not show creation notice:\n%s", body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "create household; body:\n%s", body)
+	assert.Contains(t, body, "Household created.", "dashboard does not show creation notice")
 
 	userID := userIDByEmail(t, client.pool, "ada@example.com")
 	var householdID uuid.UUID
@@ -36,7 +34,7 @@ func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uu
 		ORDER BY h.created_at DESC
 		LIMIT 1`, userID, name,
 	).Scan(&householdID); err != nil {
-		t.Fatalf("look up created household: %v", err)
+		require.NoError(t, err, "look up created household")
 	}
 	return householdID
 }
@@ -50,25 +48,18 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 		"name":       {""},
 	})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "Household name is required.") {
-		t.Fatalf("invalid household = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid household; body:\n%s", body)
+	assert.Contains(t, body, "Household name is required.")
 
 	homeID := createHouseholdHTML(t, client, csrf, "Home")
 	settingsPath := "/app/households/" + homeID.String() + "/settings"
 
 	response, err := client.follow.Get(client.baseURL + settingsPath)
-	if err != nil {
-		t.Fatalf("GET settings: %v", err)
-	}
+	require.NoError(t, err, "GET settings")
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("GET settings = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "GET settings; body:\n%s", body)
 	for _, want := range []string{"Home", "Members", "ada@example.com", "RSD"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("settings does not contain %q", want)
-		}
+		assert.Contains(t, body, want, "settings")
 	}
 
 	response = client.postForm(t, settingsPath, url.Values{
@@ -76,79 +67,58 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 		"name":       {"Shared home"},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "Household settings saved.") || !strings.Contains(body, "Shared home") {
-		t.Fatalf("rename household = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "rename household; body:\n%s", body)
+	assert.Contains(t, body, "Household settings saved.")
+	assert.Contains(t, body, "Shared home")
 
 	grace := newTestClientWithPool(t, client.pool)
 	grace.registerHTML(t, "grace@example.com")
 
 	response, err = grace.follow.Get(grace.baseURL + settingsPath)
-	if err != nil {
-		t.Fatalf("grace GET settings: %v", err)
-	}
+	require.NoError(t, err, "grace GET settings")
 	response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("non-member settings = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "non-member settings")
 
 	graceID := userIDByEmail(t, client.pool, "grace@example.com")
 	if _, err := client.pool.Exec(context.Background(), `
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, graceID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	response, err = grace.follow.Get(grace.baseURL + settingsPath)
-	if err != nil {
-		t.Fatalf("member GET settings: %v", err)
-	}
+	require.NoError(t, err, "member GET settings")
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusForbidden || !strings.Contains(body, "Only household admins") {
-		t.Errorf("member settings = %d, body:\n%s", response.StatusCode, body)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member settings; body:\n%s", body)
+	assert.Contains(t, body, "Only household admins")
 
 	response, err = client.follow.Get(client.baseURL + settingsPath)
-	if err != nil {
-		t.Fatalf("admin GET settings: %v", err)
-	}
+	require.NoError(t, err, "admin GET settings")
 	body = readBody(t, response)
-	if !strings.Contains(body, "grace@example.com") {
-		t.Errorf("admin settings does not list member:\n%s", body)
-	}
+	assert.Contains(t, body, "grace@example.com", "admin settings does not list member")
 
 	createHouseholdHTML(t, client, csrf, "Second home")
 	response, err = client.follow.Get(client.baseURL + "/app")
-	if err != nil {
-		t.Fatalf("GET dashboard after second household: %v", err)
-	}
+	require.NoError(t, err, "GET dashboard after second household")
 	body = readBody(t, response)
-	if !strings.Contains(body, "Second home") {
-		t.Errorf("second household was not made active:\n%s", body)
-	}
+	assert.Contains(t, body, "Second home", "second household was not made active")
 
 	response = client.postForm(t, "/app/active-household", url.Values{
 		"csrf_token":   {csrf},
 		"household_id": {homeID.String()},
 	})
 	body = readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, ">Shared home</h1>") {
-		t.Fatalf("switch household = %d, body:\n%s", response.StatusCode, body)
-	}
-	if strings.Contains(body, ">Second home</h1>") {
-		t.Errorf("dashboard still shows the previous household:\n%s", body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "switch household; body:\n%s", body)
+	assert.Contains(t, body, ">Shared home</h1>")
+	assert.NotContains(t, body, ">Second home</h1>", "dashboard still shows the previous household")
 }
 
 func TestHouseholdHTMLRequiresAuth(t *testing.T) {
 	client := newTestClient(t)
 	response, err := client.noRedirect.Get(client.baseURL + "/app/households/new")
-	if err != nil {
-		t.Fatalf("GET new household: %v", err)
-	}
+	require.NoError(t, err, "GET new household")
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/login" {
-		t.Errorf("GET new household = %d %q, want 303 /login", response.StatusCode, response.Header.Get("Location"))
-	}
+	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "GET new household")
+	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 }

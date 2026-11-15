@@ -5,8 +5,10 @@ package server
 import (
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"budgettracker/internal/testdb"
 )
@@ -26,8 +28,8 @@ func TestMVPWorkflowSmoke(t *testing.T) {
 	response := admin.apiRequest(t, http.MethodPost, homePath+"/invitations", map[string]any{
 		"email": "partner@example.com", "role": "member",
 	}, adminCSRF)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("invite = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusCreated, response.StatusCode, "invite") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
 	var invitation invitationEnvelope
 	decodeBody(t, response, &invitation)
@@ -35,9 +37,8 @@ func TestMVPWorkflowSmoke(t *testing.T) {
 	memberCSRF := member.registerHTML(t, "partner@example.com")
 	response = member.postForm(t, "/invitations/"+invitation.Token, url.Values{"csrf_token": {memberCSRF}})
 	body := readBody(t, response)
-	if response.StatusCode != http.StatusOK || !strings.Contains(body, "You joined the household.") {
-		t.Fatalf("accept invitation = %d, body:\n%s", response.StatusCode, body)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "accept invitation; body:\n%s", body)
+	assert.Contains(t, body, "You joined the household.")
 
 	createRateAPI(t, admin, adminCSRF, map[string]any{
 		"from_currency_code": "EUR", "to_currency_code": "RSD",
@@ -55,27 +56,24 @@ func TestMVPWorkflowSmoke(t *testing.T) {
 
 	response = admin.apiRequest(t, http.MethodGet,
 		"/api/v1/reports/summary?scope=all&from=2026-11-01&to=2026-11-30&currency=RSD", nil, "")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("summary = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusOK, response.StatusCode, "summary") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
 	var summary summaryEnvelope
 	decodeBody(t, response, &summary)
-	if summary.Summary.IncomeMinor != 12000 ||
-		summary.Summary.SpendingMinor != 117500 ||
-		summary.Summary.NetMinor != -105500 ||
-		!summary.Summary.Complete {
-		t.Errorf("summary = %+v", summary.Summary)
-	}
+	assert.Equal(t, int64(12000), summary.Summary.IncomeMinor, "summary = %+v", summary.Summary)
+	assert.Equal(t, int64(117500), summary.Summary.SpendingMinor, "summary = %+v", summary.Summary)
+	assert.Equal(t, int64(-105500), summary.Summary.NetMinor, "summary = %+v", summary.Summary)
+	assert.True(t, summary.Summary.Complete, "summary = %+v", summary.Summary)
 
 	response = member.apiRequest(t, http.MethodGet,
 		"/api/v1/reports/summary?scope=mine&from=2026-11-01&to=2026-11-30&currency=RSD", nil, "")
 	var memberSummary summaryEnvelope
 	decodeBody(t, response, &memberSummary)
-	if response.StatusCode != http.StatusOK || memberSummary.Summary.IncomeMinor != 2000 {
-		t.Errorf("member summary = %d, %+v", response.StatusCode, memberSummary.Summary)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "member summary = %+v", memberSummary.Summary)
+	assert.Equal(t, int64(2000), memberSummary.Summary.IncomeMinor, "member summary = %+v", memberSummary.Summary)
 
 	if _, err := pool.Exec(t.Context(), "SELECT 1"); err != nil {
-		t.Fatalf("database health check: %v", err)
+		require.NoError(t, err, "database health check")
 	}
 }

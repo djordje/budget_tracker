@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"budgettracker/internal/testdb"
 )
 
@@ -57,15 +60,14 @@ func TestOptionsAPI(t *testing.T) {
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, memberID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	response := admin.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/options", nil, "")
 	var initial optionsEnvelope
 	decodeBody(t, response, &initial)
-	if response.StatusCode != http.StatusOK || initial.Options.DefaultIncomeCurrencyCode != "RSD" {
-		t.Errorf("initial options = %d, %+v", response.StatusCode, initial.Options)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "initial options = %+v", initial.Options)
+	assert.Equal(t, "RSD", initial.Options.DefaultIncomeCurrencyCode, "initial options = %+v", initial.Options)
 
 	response = admin.apiRequest(t, http.MethodPut, "/api/v1/households/"+homeID.String()+"/options", map[string]any{
 		"default_income_currency_code":   "EUR",
@@ -74,18 +76,15 @@ func TestOptionsAPI(t *testing.T) {
 	}, adminCSRF)
 	var updated optionsEnvelope
 	decodeBody(t, response, &updated)
-	if response.StatusCode != http.StatusOK || updated.Options.DefaultDisplayCurrencyCode != "GBP" {
-		t.Errorf("updated options = %d, %+v", response.StatusCode, updated.Options)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "updated options = %+v", updated.Options)
+	assert.Equal(t, "GBP", updated.Options.DefaultDisplayCurrencyCode, "updated options = %+v", updated.Options)
 
 	response = member.apiRequest(t, http.MethodPut, "/api/v1/households/"+homeID.String()+"/options", map[string]any{
 		"default_income_currency_code":   "RSD",
 		"default_spending_currency_code": "RSD",
 		"default_display_currency_code":  "RSD",
 	}, memberCSRFValue)
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("member update household options = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member update household options")
 	response.Body.Close()
 
 	response = outsider.apiRequest(t, http.MethodPut, "/api/v1/households/"+homeID.String()+"/options", map[string]any{
@@ -93,20 +92,15 @@ func TestOptionsAPI(t *testing.T) {
 		"default_spending_currency_code": "RSD",
 		"default_display_currency_code":  "RSD",
 	}, outsiderCSRFValue)
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("outsider update household options = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider update household options")
 	response.Body.Close()
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/my-options", nil, "")
 	var inherited myOptionsEnvelope
 	decodeBody(t, response, &inherited)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("my options = %d", response.StatusCode)
-	}
-	if inherited.Options.DefaultIncomeCurrencyCode != nil || inherited.Effective.DefaultIncomeCurrencyCode != "EUR" {
-		t.Errorf("inherited options = %+v", inherited)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "my options")
+	assert.Nil(t, inherited.Options.DefaultIncomeCurrencyCode, "inherited options = %+v", inherited)
+	assert.Equal(t, "EUR", inherited.Effective.DefaultIncomeCurrencyCode, "inherited options = %+v", inherited)
 
 	response = member.apiRequest(t, http.MethodPut, "/api/v1/households/"+homeID.String()+"/my-options", map[string]any{
 		"default_income_currency_code":   "RSD",
@@ -115,20 +109,13 @@ func TestOptionsAPI(t *testing.T) {
 	}, memberCSRFValue)
 	var overridden myOptionsEnvelope
 	decodeBody(t, response, &overridden)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("update my options = %d", response.StatusCode)
-	}
-	if overridden.Options.DefaultIncomeCurrencyCode == nil || *overridden.Options.DefaultIncomeCurrencyCode != "RSD" {
-		t.Errorf("income override = %v", overridden.Options.DefaultIncomeCurrencyCode)
-	}
-	if overridden.Options.DefaultSpendingCurrencyCode != nil {
-		t.Errorf("spending override should inherit, got %v", overridden.Options.DefaultSpendingCurrencyCode)
-	}
-	if overridden.Effective.DefaultIncomeCurrencyCode != "RSD" ||
-		overridden.Effective.DefaultSpendingCurrencyCode != "USD" ||
-		overridden.Effective.DefaultDisplayCurrencyCode != "EUR" {
-		t.Errorf("effective options = %+v", overridden.Effective)
-	}
+	require.Equal(t, http.StatusOK, response.StatusCode, "update my options")
+	require.NotNil(t, overridden.Options.DefaultIncomeCurrencyCode, "income override")
+	assert.Equal(t, "RSD", *overridden.Options.DefaultIncomeCurrencyCode, "income override")
+	assert.Nil(t, overridden.Options.DefaultSpendingCurrencyCode, "spending override should inherit")
+	assert.Equal(t, "RSD", overridden.Effective.DefaultIncomeCurrencyCode, "effective options")
+	assert.Equal(t, "USD", overridden.Effective.DefaultSpendingCurrencyCode, "effective options")
+	assert.Equal(t, "EUR", overridden.Effective.DefaultDisplayCurrencyCode, "effective options")
 }
 
 func TestInvitationAPI(t *testing.T) {
@@ -145,41 +132,36 @@ func TestInvitationAPI(t *testing.T) {
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, homeID, memberID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	response := admin.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
 		"email": " New@Example.com ",
 		"role":  "member",
 	}, adminCSRF)
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("create invitation = %d, body:\n%s", response.StatusCode, readBody(t, response))
+	if !assert.Equal(t, http.StatusCreated, response.StatusCode, "create invitation") {
+		t.Fatalf("body:\n%s", readBody(t, response))
 	}
 	var created invitationEnvelope
 	decodeBody(t, response, &created)
-	if created.Token == "" || created.Invitation.Email != "new@example.com" || created.Invitation.Role != "member" {
-		t.Errorf("created invitation = %+v, token=%q", created.Invitation, created.Token)
-	}
+	assert.NotEmpty(t, created.Token, "created invitation = %+v", created.Invitation)
+	assert.Equal(t, "new@example.com", created.Invitation.Email, "created invitation = %+v", created.Invitation)
+	assert.Equal(t, "member", created.Invitation.Role, "created invitation = %+v", created.Invitation)
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/invitations", nil, "")
 	var listed invitationsEnvelope
 	decodeBody(t, response, &listed)
-	if response.StatusCode != http.StatusOK || len(listed.Invitations) != 1 {
-		t.Errorf("listed invitations = %d, %+v", response.StatusCode, listed.Invitations)
-	}
+	assert.Equal(t, http.StatusOK, response.StatusCode, "listed invitations = %+v", listed.Invitations)
+	assert.Len(t, listed.Invitations, 1, "listed invitations = %+v", listed.Invitations)
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/invitations", nil, "")
-	if response.StatusCode != http.StatusForbidden {
-		t.Errorf("member list invitations = %d, want 403", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member list invitations")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
 		"email": "new@example.com", "role": "member",
 	}, adminCSRF)
-	if response.StatusCode != http.StatusConflict {
-		t.Errorf("duplicate invitation = %d, want 409", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusConflict, response.StatusCode, "duplicate invitation")
 	response.Body.Close()
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
@@ -187,22 +169,17 @@ func TestInvitationAPI(t *testing.T) {
 	}, adminCSRF)
 	var memberConflict errorEnvelope
 	decodeBody(t, response, &memberConflict)
-	if response.StatusCode != http.StatusConflict || memberConflict.Error.Code != "already_member" {
-		t.Errorf("existing member invite = %d, %+v", response.StatusCode, memberConflict.Error)
-	}
+	assert.Equal(t, http.StatusConflict, response.StatusCode, "existing member invite = %+v", memberConflict.Error)
+	assert.Equal(t, "already_member", memberConflict.Error.Code, "existing member invite")
 
 	response = outsider.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
 		"email": "another@example.com", "role": "member",
 	}, outsiderCSRFValue)
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("outsider invite = %d, want 404", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider invite")
 	response.Body.Close()
 
 	invitationID := created.Invitation.ID
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/households/"+homeID.String()+"/invitations/"+invitationID, nil, adminCSRF)
-	if response.StatusCode != http.StatusNoContent {
-		t.Errorf("revoke invitation = %d, want 204", response.StatusCode)
-	}
+	assert.Equal(t, http.StatusNoContent, response.StatusCode, "revoke invitation")
 	response.Body.Close()
 }
