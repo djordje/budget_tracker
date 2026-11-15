@@ -320,8 +320,15 @@ Run on 2026-11-15 against the Compose PostgreSQL 18 instance on `localhost:5433`
 | `mise run check:all` | passed: `format:check`, `lint`, `test`, `test:integration`, `build` |
 | `cd backend && golangci-lint run --default=standard --max-same-issues=0 --max-issues-per-linter=0 ./...` | 0 issues |
 | `cd backend && golangci-lint run --default=standard --max-same-issues=0 --max-issues-per-linter=0 --build-tags=integration ./...` | 0 issues |
-| `cd backend && go test -race -run 'TestAttemptLimiter\|TestRegistrationLimiter' ./internal/auth/` | green `-race` (T6 limiter behavior) |
+| Limiter `-race` run (command below) | green `-race` (T6 limiter behavior) |
 | `cd backend && TEST_DATABASE_URL=... go test -race -tags=integration -run 'TestSummaryReadsOneSnapshot' ./internal/reporting/` | green `-race` (T10 snapshot) |
+
+The T6 limiter race command, corrected to an unescaped alternation so it
+selects both suites:
+
+```sh
+cd backend && go test -race -run 'TestAttemptLimiter|TestRegistrationLimiter' ./internal/auth/
+```
 
 `TestSafeNextPathKeepsRedirectsOnThisOrigin` and `TestOversizedAmountLeavesNoPartialWrite`/`TestOversizedRateLeavesNoPartialWrite` ran inside the two `mise` test tasks above; `TestSummaryReadsOneSnapshot` also passed five consecutive `-count=1` runs.
 
