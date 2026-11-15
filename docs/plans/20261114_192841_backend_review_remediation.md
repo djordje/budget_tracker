@@ -1,6 +1,6 @@
 # Backend Review Remediation
 
-Status: Proposed — not started. Nothing in this plan has been implemented. It records the findings of a full read of `backend/` so the work can be scheduled, amended, or rejected without re-deriving the analysis.
+Status: In progress — approved 2026-11-15; implementation started in the milestone order below. The findings come from a full read of `backend/`; the decision log in §10 records the confirmed resolutions to the §8 questions.
 
 ## 1. Purpose and context
 
@@ -286,3 +286,17 @@ Recommended order: Milestone 0 → 1 → 2 → 3 → 5 → 4 → 6 → 7. Assert
 | T6 | 1 |
 | T7 | 2 |
 | S6 | Documentation only; revisit if Q6 changes |
+
+## 10. Decision log
+
+Resolved 2026-11-15 before implementation, adopting the proposal recorded in each question. Amend this log if an implementation constraint forces a different answer; do not silently deviate.
+
+| Question | Decision |
+| --- | --- |
+| Q1 — Registration throttling | Adopt the proposed policy: 5 attempts per 15 minutes keyed by IP plus normalized email, mirroring the login limiter. No CAPTCHA-style gate in this plan. |
+| Q2 — Email enumeration at registration | Keep the explicit "account already exists" validation message and rely on throttling (Milestone 1, commit 3). The generic-response alternative is not taken. |
+| Q3 — Report overflow behavior | Keep the explicit conversion-overflow error that aborts the report, and document it. Marking the summary incomplete is not taken. |
+| Q4 — Rate input notation | Reject scientific notation in `canonicalRate` to match the form copy, and keep exactly-representable values with up to 8 decimal places (extra trailing zeros canonicalize away). Table-driven tests own the scale boundary and the Milestone 0 validation-message representation. |
+| Q5 — Membership FK delete behavior | `ON DELETE CASCADE`, documented in the migration comment, matching the current `users` cascade. No member-removal feature exists yet. |
+| Q6 — CSRF hardening | The single-host, no-sibling-subdomain assumption still holds, so S6 stays documentation-only. Revisit if deployment changes. |
+| Q7 — Y7 consolidation scope | Mechanical consolidation of validation-error and date-parsing helpers is in scope in Milestone 6, limited to helpers whose behavior is already identical. No `utils` package and no behavior change. |
