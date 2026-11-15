@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,7 +160,7 @@ func (h *Handler) renderTemplate(
 
 	var body bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&body, name, data); err != nil {
-		h.logger.Error("render template", "page", page, "template", name, "path", r.URL.Path, "error", err)
+		h.logger.Error("render template", "page", page, "template", name, "path", logPath(r), "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -168,7 +169,7 @@ func (h *Handler) renderTemplate(
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if _, err := body.WriteTo(w); err != nil {
-		h.logger.Error("write template", "page", page, "template", name, "path", r.URL.Path, "error", err)
+		h.logger.Error("write template", "page", page, "template", name, "path", logPath(r), "error", err)
 	}
 }
 
@@ -185,6 +186,15 @@ func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int
 }
 
 func (h *Handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
-	h.logger.Error("request failed", "path", r.URL.Path, "error", err)
+	h.logger.Error("request failed", "path", logPath(r), "error", err)
 	h.renderError(w, r, http.StatusInternalServerError, "Something went wrong", "Please try again in a moment.")
+}
+
+// logPath returns the request path for logging with invitation tokens removed,
+// mirroring the redaction in httpapi.RequestLogger.
+func logPath(r *http.Request) string {
+	if strings.HasPrefix(r.URL.Path, "/invitations/") {
+		return "/invitations/[redacted]"
+	}
+	return r.URL.Path
 }

@@ -467,7 +467,7 @@ func (h *Handler) renderEntryDeleteError(w http.ResponseWriter, r *http.Request,
 		data.Message = "You do not have permission to delete that entry."
 		h.renderFragment(w, r, "entries", "entries_error", http.StatusForbidden, data)
 	default:
-		h.logger.Error("delete entry failed", "path", r.URL.Path, "error", err)
+		h.logger.Error("delete entry failed", "path", logPath(r), "error", err)
 		data.Message = "The entry could not be deleted. Try again."
 		h.renderFragment(w, r, "entries", "entries_error", http.StatusInternalServerError, data)
 	}
