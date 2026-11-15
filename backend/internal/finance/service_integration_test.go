@@ -328,6 +328,63 @@ func TestUpdateMapsVanishedRowToNotFound(t *testing.T) {
 	assert.Equal(t, 0, remaining, "row deleted by the trigger is still stored")
 }
 
+// TestOversizedAmountLeavesNoPartialWrite checks that an amount outside the
+// int64 minor-unit range is rejected before any statement runs: a rejected
+// create inserts no row, and a rejected update applies none of its other
+// changes. Both adapters pass the raw amount string through, so the service
+// owns this boundary.
+func TestOversizedAmountLeavesNoPartialWrite(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+	oversized := strings.Repeat("9", 20)
+
+	_, err := fixture.service.Create(ctx, CreateParams{
+		Kind:         KindIncome,
+		HouseholdID:  fixture.householdID,
+		ActorID:      fixture.admin.User.ID,
+		Amount:       oversized,
+		CurrencyCode: "RSD",
+		EntryDate:    date(2026, 10, 15),
+	})
+	require.Error(t, err, "Create() with an oversized amount")
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation, "Create() with an oversized amount")
+	assert.Contains(t, validation.Fields, "amount", "fields = %v", validation.Fields)
+
+	var rows int
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM incomes WHERE household_id = $1", fixture.householdID,
+	).Scan(&rows), "count incomes")
+	assert.Zero(t, rows, "rejected create inserted a row")
+
+	created, err := fixture.service.Create(ctx, CreateParams{
+		Kind: KindIncome, HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID,
+		Amount: "10", CurrencyCode: "RSD", EntryDate: date(2026, 10, 15), Description: "original",
+	})
+	require.NoError(t, err, "create entry")
+
+	otherDate := date(2026, 11, 20)
+	_, err = fixture.service.Update(ctx, UpdateParams{
+		Kind:        KindIncome,
+		ID:          created.ID,
+		ActorID:     fixture.admin.User.ID,
+		Amount:      &oversized,
+		EntryDate:   &otherDate,
+		Description: strPtr("partially applied"),
+	})
+	require.Error(t, err, "Update() with an oversized amount")
+	var updateValidation *ValidationError
+	require.ErrorAs(t, err, &updateValidation, "Update() with an oversized amount")
+	assert.Contains(t, updateValidation.Fields, "amount", "fields = %v", updateValidation.Fields)
+
+	stored, err := fixture.service.Get(ctx, fixture.admin.User.ID, KindIncome, created.ID)
+	require.NoError(t, err, "Get() after a rejected update")
+	assert.Equal(t, created.AmountMinor, stored.AmountMinor, "amount after rejected update")
+	assert.Equal(t, created.Description, stored.Description, "description after rejected update")
+	assert.Equal(t, created.EntryDate, stored.EntryDate, "entry date after rejected update")
+	assert.Equal(t, created.UpdatedAt, stored.UpdatedAt, "updated_at after rejected update")
+}
+
 func TestListScopesFiltersAndPagination(t *testing.T) {
 	fixture := newFinanceFixture(t)
 	ctx := context.Background()

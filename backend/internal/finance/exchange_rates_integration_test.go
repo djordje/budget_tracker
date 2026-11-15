@@ -168,6 +168,67 @@ func TestExchangeRateValidation(t *testing.T) {
 	}
 }
 
+// TestOversizedRateLeavesNoPartialWrite checks that a rate the schema cannot
+// store is rejected before any statement runs: a rejected create inserts no
+// row, and a rejected update applies none of its other changes. numeric(18,8)
+// holds only rates below 10^10, which the service enforces first.
+func TestOversizedRateLeavesNoPartialWrite(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+	oversized := "10000000000"
+
+	_, err := fixture.service.CreateExchangeRate(ctx, CreateExchangeRateParams{
+		HouseholdID:      fixture.householdID,
+		ActorID:          fixture.admin.User.ID,
+		FromCurrencyCode: "EUR",
+		ToCurrencyCode:   "RSD",
+		Rate:             oversized,
+		RateDate:         date(2026, 10, 15),
+	})
+	require.Error(t, err, "CreateExchangeRate() with an oversized rate")
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation, "CreateExchangeRate() with an oversized rate")
+	assert.Contains(t, validation.Fields, "rate", "fields = %v", validation.Fields)
+
+	var rows int
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM exchange_rates WHERE household_id = $1", fixture.householdID,
+	).Scan(&rows), "count exchange rates")
+	assert.Zero(t, rows, "rejected create inserted a rate")
+
+	created, err := fixture.service.CreateExchangeRate(ctx, CreateExchangeRateParams{
+		HouseholdID:      fixture.householdID,
+		ActorID:          fixture.admin.User.ID,
+		FromCurrencyCode: "EUR",
+		ToCurrencyCode:   "RSD",
+		Rate:             "117.25",
+		RateDate:         date(2026, 10, 15),
+	})
+	require.NoError(t, err, "CreateExchangeRate() error")
+
+	otherDate := date(2026, 11, 20)
+	monthly := true
+	_, err = fixture.service.UpdateExchangeRate(ctx, UpdateExchangeRateParams{
+		ID:        created.ID,
+		ActorID:   fixture.admin.User.ID,
+		Rate:      &oversized,
+		RateDate:  &otherDate,
+		IsMonthly: &monthly,
+	})
+	require.Error(t, err, "UpdateExchangeRate() with an oversized rate")
+	var updateValidation *ValidationError
+	require.ErrorAs(t, err, &updateValidation, "UpdateExchangeRate() with an oversized rate")
+	assert.Contains(t, updateValidation.Fields, "rate", "fields = %v", updateValidation.Fields)
+
+	stored, err := fixture.service.ListExchangeRates(ctx, fixture.admin.User.ID, fixture.householdID)
+	require.NoError(t, err, "ListExchangeRates() error")
+	require.Len(t, stored, 1, "rate rows after a rejected update")
+	assert.Equal(t, created.Rate, stored[0].Rate, "rate after rejected update")
+	assert.Equal(t, created.RateDate, stored[0].RateDate, "rate date after rejected update")
+	assert.Equal(t, created.IsMonthly, stored[0].IsMonthly, "monthly flag after rejected update")
+	assert.Equal(t, created.UpdatedAt, stored[0].UpdatedAt, "updated_at after rejected update")
+}
+
 func TestExchangeRateIdentifierBoundaries(t *testing.T) {
 	fixture := newFinanceFixture(t)
 	ctx := context.Background()
