@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -119,4 +120,43 @@ func TestConvertMinorRejectsInvalidInput(t *testing.T) {
 
 	_, err = ConvertMinor(-1, 2, 2, big.NewRat(1, 1))
 	assert.Error(t, err, "ConvertMinor(negative amount)")
+}
+
+// TestConvertMinorRejectsOverflow checks that an exact conversion whose result
+// cannot be represented returns an error and no partial amount.
+func TestConvertMinorRejectsOverflow(t *testing.T) {
+	tests := []struct {
+		name      string
+		amount    int64
+		fromUnits int32
+		toUnits   int32
+		rate      *big.Rat
+	}{
+		{
+			name:   "largest amount with the largest rate",
+			amount: math.MaxInt64,
+			rate:   big.NewRat(math.MaxInt64, 1),
+		},
+		{
+			name:      "large amount with a large rate at two decimals",
+			amount:    math.MaxInt64,
+			fromUnits: 2,
+			toUnits:   2,
+			rate:      big.NewRat(1_000_000_000, 1),
+		},
+		{
+			name:    "large amount with a large display exponent",
+			amount:  1_000_000_000_000_000_000,
+			toUnits: 4,
+			rate:    big.NewRat(1, 1),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ConvertMinor(tt.amount, tt.fromUnits, tt.toUnits, tt.rate)
+			assert.ErrorContains(t, err, "converted amount is too large",
+				"ConvertMinor(%d, %d, %d)", tt.amount, tt.fromUnits, tt.toUnits)
+			assert.Zero(t, got, "ConvertMinor(%d, %d, %d)", tt.amount, tt.fromUnits, tt.toUnits)
+		})
+	}
 }

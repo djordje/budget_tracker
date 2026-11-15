@@ -21,6 +21,8 @@ func TestParseAmount(t *testing.T) {
 		{name: "two decimals", raw: "2.55", minorUnits: 2, want: 255},
 		{name: "smallest unit", raw: "0.01", minorUnits: 2, want: 1},
 		{name: "three decimals", raw: "1.234", minorUnits: 3, want: 1234},
+		{name: "four decimals", raw: "1.2345", minorUnits: 4, want: 12345},
+		{name: "four decimals with padding", raw: "0.5", minorUnits: 4, want: 5000},
 		{name: "zero exponent", raw: "123", minorUnits: 0, want: 123},
 		{name: "whitespace", raw: "  12.5  ", minorUnits: 2, want: 1250},
 		{name: "leading zeros", raw: "00012.50", minorUnits: 2, want: 1250},
@@ -36,6 +38,8 @@ func TestParseAmount(t *testing.T) {
 		{name: "letters", raw: "12a", minorUnits: 2, wantErr: true},
 		{name: "empty", raw: "", minorUnits: 2, wantErr: true},
 		{name: "overflow", raw: strings.Repeat("9", 30), minorUnits: 2, wantErr: true},
+		{name: "unsupported minor units", raw: "1.23456", minorUnits: 5, wantErr: true},
+		{name: "negative minor units", raw: "1.23", minorUnits: -1, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -65,9 +69,43 @@ func TestFormatAmount(t *testing.T) {
 		{minor: 0, minorUnits: 2, want: "0.00"},
 		{minor: -255, minorUnits: 2, want: "-2.55"},
 		{minor: 1234, minorUnits: 3, want: "1.234"},
+		{minor: 12345, minorUnits: 4, want: "1.2345"},
+		{minor: 5, minorUnits: 4, want: "0.0005"},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, FormatAmount(tt.minor, tt.minorUnits), "FormatAmount(%d, %d)", tt.minor, tt.minorUnits)
+	}
+}
+
+// TestAmountRoundTrip checks that formatted amounts parse back to the same
+// minor units at every supported exponent, including four decimal places.
+func TestAmountRoundTrip(t *testing.T) {
+	tests := []struct {
+		minor      int64
+		minorUnits int32
+	}{
+		{minor: 12345, minorUnits: 4},
+		{minor: 5, minorUnits: 4},
+		{minor: 1234, minorUnits: 3},
+		{minor: 255, minorUnits: 2},
+		{minor: 10000, minorUnits: 2},
+		{minor: 123, minorUnits: 0},
+	}
+	for _, tt := range tests {
+		formatted := FormatAmount(tt.minor, tt.minorUnits)
+		parsed, err := ParseAmount(formatted, tt.minorUnits)
+		require.NoError(t, err, "ParseAmount(%q, %d)", formatted, tt.minorUnits)
+		assert.Equal(t, tt.minor, parsed, "round trip of %d at %d minor units", tt.minor, tt.minorUnits)
+	}
+}
+
+// TestUnsupportedMinorUnitsFallBackToZero documents today's behavior: an
+// exponent outside 0..4 makes the formatters return "0" instead of reporting
+// the bad currency data (finding C6, deliberately unchanged by this plan).
+func TestUnsupportedMinorUnitsFallBackToZero(t *testing.T) {
+	for _, minorUnits := range []int32{5, -1} {
+		assert.Equal(t, "0", FormatAmount(12345, minorUnits), "FormatAmount minor units %d", minorUnits)
+		assert.Equal(t, "0", DisplayAmount(12345, minorUnits), "DisplayAmount minor units %d", minorUnits)
 	}
 }
 
@@ -82,6 +120,8 @@ func TestDisplayAmount(t *testing.T) {
 		{minor: 123, minorUnits: 0, want: "123"},
 		{minor: 100000, minorUnits: 0, want: "100,000"},
 		{minor: -123456, minorUnits: 2, want: "-1,234.56"},
+		{minor: 123456789, minorUnits: 4, want: "12,345.6789"},
+		{minor: 5, minorUnits: 4, want: "0.0005"},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, DisplayAmount(tt.minor, tt.minorUnits), "DisplayAmount(%d, %d)", tt.minor, tt.minorUnits)

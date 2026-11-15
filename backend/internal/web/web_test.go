@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -463,6 +465,8 @@ func TestSafeNextPath(t *testing.T) {
 	}{
 		{raw: "/invitations/token", fallback: "/app", want: "/invitations/token"},
 		{raw: "/app?notice=invitation_accepted", fallback: "/app", want: "/app?notice=invitation_accepted"},
+		{raw: "/app?page=2", fallback: "/app", want: "/app?page=2"},
+		{raw: "?page=2", fallback: "/app", want: "/app"},
 		{raw: "", fallback: "/app", want: "/app"},
 		{raw: "//evil.example/path", fallback: "/app", want: "/app"},
 		{raw: "https://evil.example/path", fallback: "/app", want: "/app"},
@@ -471,6 +475,39 @@ func TestSafeNextPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, safeNextPath(tt.raw, tt.fallback), "safeNextPath(%q)", tt.raw)
+	}
+}
+
+// TestSafeNextPathKeepsRedirectsOnThisOrigin asserts the safety property for
+// inputs a browser could read as protocol-relative or cross-origin instead of
+// asserting one accepted string: the result is always a non-empty path on this
+// origin. A backslash authority such as /\evil.example stays on this origin
+// because the parser escapes the backslash rather than treating it as a host.
+func TestSafeNextPathKeepsRedirectsOnThisOrigin(t *testing.T) {
+	fallback := "/app"
+	tests := []struct{ name, raw string }{
+		{name: "backslash authority", raw: `/\evil.example`},
+		{name: "encoded slashes", raw: "/%2f%2fevil.example"},
+		{name: "protocol relative", raw: "//evil.example"},
+		{name: "absolute https URL", raw: "https://evil.example/path"},
+		{name: "absolute http URL", raw: "http://evil.example"},
+		{name: "javascript scheme", raw: "javascript:alert(1)"},
+		{name: "nul byte", raw: "/app\x00page"},
+		{name: "newline", raw: "/app\nLocation: https://evil.example"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := safeNextPath(tt.raw, fallback)
+			require.NotEmpty(t, got, "safeNextPath(%q)", tt.raw)
+			assert.True(t, strings.HasPrefix(got, "/"), "safeNextPath(%q) = %q", tt.raw, got)
+			assert.False(t, strings.HasPrefix(got, "//"), "safeNextPath(%q) = %q", tt.raw, got)
+			parsed, err := url.Parse(got)
+			require.NoError(t, err, "safeNextPath(%q) = %q", tt.raw, got)
+			assert.False(t, parsed.IsAbs(), "safeNextPath(%q) = %q", tt.raw, got)
+			assert.Empty(t, parsed.Scheme, "safeNextPath(%q) = %q", tt.raw, got)
+			assert.NotEmpty(t, parsed.Path, "safeNextPath(%q) = %q", tt.raw, got)
+			assert.NotRegexp(t, `[\x00-\x1f\x7f]`, got, "safeNextPath(%q) = %q", tt.raw, got)
+		})
 	}
 }
 
