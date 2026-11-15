@@ -57,6 +57,8 @@ func TestReportHandlerRejectsInvalidRequests(t *testing.T) {
 		{name: "missing from", query: "to=2026-10-31", wantStatus: http.StatusUnprocessableEntity},
 		{name: "missing to", query: "from=2026-10-01", wantStatus: http.StatusUnprocessableEntity},
 		{name: "invalid from", query: "from=yesterday&to=2026-10-31", wantStatus: http.StatusUnprocessableEntity},
+		{name: "padded from", query: "from=%202026-10-01&to=2026-10-31", wantStatus: http.StatusUnprocessableEntity},
+		{name: "whitespace-only from", query: "from=+&to=2026-10-31", wantStatus: http.StatusUnprocessableEntity},
 		{name: "invalid scope", query: "from=2026-10-01&to=2026-10-31&scope=everyone", wantStatus: http.StatusBadRequest},
 		{name: "invalid household", query: "from=2026-10-01&to=2026-10-31&household_id=nope", wantStatus: http.StatusNotFound},
 	}

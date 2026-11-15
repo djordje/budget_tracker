@@ -666,15 +666,15 @@ func dateOnly(value time.Time) time.Time {
 	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// ParseOptionalDate parses a user-supplied date in the wire format. An empty
-// value after trimming means "no date". Both adapters use this parser so they
-// accept exactly the same input.
+// ParseOptionalDate parses a user-supplied date in the exact wire format. An
+// empty value means "no date"; any padding, whitespace-only input, or other
+// shape is an error. Both adapters use this parser so they accept exactly the
+// same input.
 func ParseOptionalDate(raw string) (*time.Time, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
+	if raw == "" {
 		return nil, nil
 	}
-	parsed, err := time.Parse(entryDateLayout, value)
+	parsed, err := time.Parse(entryDateLayout, raw)
 	if err != nil {
 		return nil, err
 	}

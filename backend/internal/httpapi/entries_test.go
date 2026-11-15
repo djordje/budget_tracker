@@ -144,6 +144,8 @@ func TestEntryHandlerRejectsInvalidQuery(t *testing.T) {
 	}{
 		{name: "scope", query: "scope=everyone"},
 		{name: "from date", query: "from=yesterday"},
+		{name: "padded from date", query: "from=%202026-10-01"},
+		{name: "whitespace-only from date", query: "from=+"},
 		{name: "to date", query: "to=2026-13-01"},
 		{name: "page", query: "page=many"},
 		{name: "page size", query: "page_size=lots"},

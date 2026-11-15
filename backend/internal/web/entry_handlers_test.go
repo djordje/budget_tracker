@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,6 +165,34 @@ func TestDeleteRejectsEntryFromAnotherHousehold(t *testing.T) {
 			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			assert.Equal(t, 0, entries.deleteCalls, "Delete() calls")
 			assert.Contains(t, recorder.Body.String(), tt.wantText)
+		})
+	}
+}
+
+func TestParseFormDateMatchesTheSharedParser(t *testing.T) {
+	valid := time.Date(2026, time.October, 15, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		raw     string
+		want    time.Time
+		wantErr bool
+	}{
+		{name: "valid", raw: "2026-10-15", want: valid},
+		{name: "empty", raw: ""},
+		{name: "padded", raw: " 2026-10-15", wantErr: true},
+		{name: "whitespace-only", raw: "   ", wantErr: true},
+		{name: "malformed", raw: "15/10/2026", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseFormDate(tt.raw)
+
+			if tt.wantErr {
+				assert.Error(t, err, "parseFormDate(%q)", tt.raw)
+				return
+			}
+			require.NoError(t, err, "parseFormDate(%q)", tt.raw)
+			assert.Equal(t, tt.want, got, "parseFormDate(%q)", tt.raw)
 		})
 	}
 }

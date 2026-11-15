@@ -94,10 +94,10 @@ func TestParseOptionalDate(t *testing.T) {
 		want    *time.Time
 		wantErr bool
 	}{
-		{name: "plain", raw: "2026-10-15", want: &date},
-		{name: "padded", raw: "  2026-10-15\t", want: &date},
+		{name: "valid", raw: "2026-10-15", want: &date},
 		{name: "empty", raw: ""},
-		{name: "whitespace only", raw: "   "},
+		{name: "padded", raw: "  2026-10-15\t", wantErr: true},
+		{name: "whitespace only", raw: "   ", wantErr: true},
 		{name: "malformed", raw: "15/10/2026", wantErr: true},
 		{name: "malformed with padding", raw: " not-a-date ", wantErr: true},
 	}

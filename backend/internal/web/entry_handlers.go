@@ -622,11 +622,14 @@ func applyEntryFormValues(data entryFormPageData, values entryFormValues) entryF
 }
 
 func parseFormDate(raw string) (time.Time, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
+	parsed, err := finance.ParseOptionalDate(raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if parsed == nil {
 		return time.Time{}, nil
 	}
-	return time.Parse(entryDateLayout, value)
+	return *parsed, nil
 }
 
 func parsePage(raw string) (int, error) {
