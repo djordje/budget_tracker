@@ -39,6 +39,20 @@ func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uu
 	return householdID
 }
 
+func TestHouseholdHTMLRejectsInvalidUTF8Name(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	response := client.postForm(t, "/app/households", url.Values{
+		"csrf_token": {csrf},
+		"name":       {"B\xffd"},
+	})
+	body := readBody(t, response)
+
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid UTF-8 household; body:\n%s", body)
+	assert.Contains(t, body, "Household name contains invalid characters.", "field validation message")
+}
+
 func TestHouseholdHTMLFlow(t *testing.T) {
 	client := newTestClient(t)
 	csrf := client.registerHTML(t, "ada@example.com")

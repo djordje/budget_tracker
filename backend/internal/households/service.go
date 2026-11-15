@@ -309,6 +309,8 @@ func validateName(raw string) (string, error) {
 	switch {
 	case name == "":
 		return "", &ValidationError{Field: "name", Message: "Household name is required."}
+	case !utf8.ValidString(name):
+		return "", &ValidationError{Field: "name", Message: "Household name contains invalid characters."}
 	case utf8.RuneCountInString(name) > 100:
 		return "", &ValidationError{Field: "name", Message: "Household name must be 100 characters or fewer."}
 	case strings.IndexFunc(name, unicode.IsControl) >= 0:
