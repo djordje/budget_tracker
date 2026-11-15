@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -106,4 +107,60 @@ func TestRequestLoggerRedactsInvitationToken(t *testing.T) {
 
 	assert.NotContains(t, output.String(), "secret-token", "invitation token was logged")
 	assert.Contains(t, output.String(), "/invitations/[redacted]", "redacted path missing")
+}
+
+func TestLimitHTMLFormBodyRejectsOversizedForms(t *testing.T) {
+	called := false
+	handler := LimitHTMLFormBody(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/app/households",
+		strings.NewReader(strings.Repeat("a", maxFormBodyBytes+1)))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code, "body = %s", recorder.Body.String())
+	assert.False(t, called, "handler was reached for an oversized form body")
+}
+
+func TestLimitHTMLFormBodyBoundsUnknownLengthForms(t *testing.T) {
+	var read int
+	var readErr error
+	handler := LimitHTMLFormBody(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		read = len(body)
+		readErr = err
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/app/households",
+		strings.NewReader(strings.Repeat("a", 2*maxFormBodyBytes)))
+	request.ContentLength = -1
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, maxFormBodyBytes, read, "bytes read from the bounded body")
+	var maxBytesError *http.MaxBytesError
+	assert.ErrorAs(t, readErr, &maxBytesError, "body read error")
+}
+
+func TestLimitHTMLFormBodyLeavesAPIBodiesToTheJSONAdapter(t *testing.T) {
+	handler := LimitHTMLFormBody(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var destination struct {
+			Name string `json:"name"`
+		}
+		WriteDecodeError(w, decodeJSON(r, &destination))
+	}))
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/households",
+		strings.NewReader(`{"name":"`+strings.Repeat("a", maxJSONBodyBytes)+`"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code, "body = %s", recorder.Body.String())
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response), "decode error response")
+	assert.Equal(t, "request_too_large", response.Error.Code, "error code")
 }

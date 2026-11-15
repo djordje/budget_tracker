@@ -161,3 +161,26 @@ func RequireAuthAPI(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
+
+// maxFormBodyBytes bounds HTML form request bodies, matching the JSON body
+// limit so both adapters reject oversized requests instead of reading them.
+const maxFormBodyBytes = 1 << 20
+
+// LimitHTMLFormBody bounds HTML form request bodies before anything parses
+// them. CSRF protection reads the submitted form value, so this bound has to
+// wrap Protect. API paths are skipped because the JSON adapter applies its own
+// bound and reports its own too-large error.
+func LimitHTMLFormBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.ContentLength > maxFormBodyBytes {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxFormBodyBytes)
+		next.ServeHTTP(w, r)
+	})
+}

@@ -125,7 +125,7 @@ func New(deps Deps) (http.Handler, error) {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", webHandler.Static()))
 	mux.Handle("GET /healthz", http.HandlerFunc(health.Live))
 	mux.Handle("GET /readyz", http.HandlerFunc(health.Ready))
-	mux.Handle("/", sessions.Load(csrf.Protect(protected)))
+	mux.Handle("/", sessions.Load(httpapi.LimitHTMLFormBody(csrf.Protect(protected))))
 
 	handler := httpapi.RequestID(
 		httpapi.SecurityHeaders(httpapi.SecurityOptions{Production: deps.SecureCookies})(
