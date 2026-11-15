@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 )
 
@@ -16,9 +18,9 @@ func TestRegistrationLimiterAllowsFiveAttemptsPerWindow(t *testing.T) {
 
 	const key = "client|email"
 	for i := 0; i < 5; i++ {
-		assert.True(t, limiter.TryAcquire(key), "attempt %d", i+1)
+		assert.True(t, limiter.TryAcquire(key, "client"), "attempt %d", i+1)
 	}
-	assert.False(t, limiter.TryAcquire(key), "sixth attempt")
+	assert.False(t, limiter.TryAcquire(key, "client"), "sixth attempt")
 }
 
 func TestAttemptLimiterReservesAtomicallyAndExpires(t *testing.T) {
@@ -26,15 +28,15 @@ func TestAttemptLimiterReservesAtomicallyAndExpires(t *testing.T) {
 	limiter := newAttemptLimiter(2, time.Minute, func() time.Time { return now })
 	const key = "hashed-key"
 
-	assert.True(t, limiter.TryAcquire(key), "first fresh attempt")
-	assert.True(t, limiter.TryAcquire(key), "second fresh attempt")
-	assert.False(t, limiter.TryAcquire(key), "limit was not enforced")
-	assert.True(t, limiter.TryAcquire("other"), "one key affected another key")
+	assert.True(t, limiter.TryAcquire(key, "client"), "first fresh attempt")
+	assert.True(t, limiter.TryAcquire(key, "client"), "second fresh attempt")
+	assert.False(t, limiter.TryAcquire(key, "client"), "limit was not enforced")
+	assert.True(t, limiter.TryAcquire("other", "client"), "one key affected another key")
 
 	now = now.Add(61 * time.Second)
-	assert.True(t, limiter.TryAcquire(key), "attempts did not expire")
+	assert.True(t, limiter.TryAcquire(key, "client"), "attempts did not expire")
 	limiter.Reset(key)
-	assert.True(t, limiter.TryAcquire(key), "reset did not clear attempts")
+	assert.True(t, limiter.TryAcquire(key, "client"), "reset did not clear attempts")
 }
 
 func TestAttemptLimiterConcurrentAdmissions(t *testing.T) {
@@ -47,7 +49,7 @@ func TestAttemptLimiterConcurrentAdmissions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if limiter.TryAcquire("same-key") {
+			if limiter.TryAcquire("same-key", "same-client") {
 				admitted.Add(1)
 			}
 		}()
@@ -57,23 +59,65 @@ func TestAttemptLimiterConcurrentAdmissions(t *testing.T) {
 	assert.Equal(t, int32(5), admitted.Load(), "admitted attempts")
 }
 
-func TestAttemptLimiterMaintainsBoundsAndEvictsOldest(t *testing.T) {
+func TestAttemptLimiterChurnCannotResetLiveCounter(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	limiter := newAttemptLimiter(2, 15*time.Minute, func() time.Time { return now })
+	limiter.maxKeys = 6
+	limiter.maxKeysPerAdmission = 6
+	limiter.maintenanceInterval = 0
+
+	assert.True(t, limiter.TryAcquire("victim", "victim-ip"), "first victim attempt")
+	assert.True(t, limiter.TryAcquire("victim", "victim-ip"), "second victim attempt")
+
+	for i := 0; i < 5; i++ {
+		now = now.Add(time.Second)
+		require.True(t, limiter.TryAcquire(fmt.Sprintf("junk-%d", i), "attacker-ip"), "junk key %d", i)
+	}
+
+	assert.False(t, limiter.TryAcquire("junk-5", "attacker-ip"), "new key at the cap")
+	assert.Contains(t, limiter.keys, "victim", "victim counter was evicted")
+	assert.False(t, limiter.TryAcquire("victim", "victim-ip"), "victim limit was reset by churn")
+}
+
+func TestAttemptLimiterBoundsKeysPerAdmission(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
+	limiter.maxKeysPerAdmission = 3
+	limiter.maintenanceInterval = 0
+
+	for i := 0; i < 3; i++ {
+		assert.True(t, limiter.TryAcquire(fmt.Sprintf("key-%d", i), "client"), "key %d", i)
+	}
+	assert.False(t, limiter.TryAcquire("one-too-many", "client"), "admission budget was not enforced")
+	assert.True(t, limiter.TryAcquire("key-0", "client"), "existing key refused after the admission budget")
+	assert.True(t, limiter.TryAcquire("other-client-key", "other-client"), "one admission key affected another")
+}
+
+func TestAttemptLimiterKeepsExistingKeysAtCapacity(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
 	limiter.maxKeys = 2
 	limiter.maintenanceInterval = 0
 
-	limiter.TryAcquire("old")
-	now = now.Add(time.Second)
-	limiter.TryAcquire("newer")
-	now = now.Add(time.Second)
-	limiter.TryAcquire("newest")
+	assert.True(t, limiter.TryAcquire("first", "client-a"), "first key")
+	assert.True(t, limiter.TryAcquire("second", "client-b"), "second key")
+	assert.False(t, limiter.TryAcquire("new", "client-c"), "new key at the cap")
+	assert.True(t, limiter.TryAcquire("first", "client-a"), "existing key at the cap")
+}
 
-	assert.LessOrEqual(t, len(limiter.attempts), 2, "limiter keys")
-	assert.NotContains(t, limiter.attempts, "old", "oldest key was not evicted")
-	assert.Contains(t, limiter.attempts, "newest", "newest key was evicted")
+func TestAttemptLimiterMaintenanceReclaimsExpiredKeys(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
+	limiter.maxKeys = 2
+	limiter.maxKeysPerAdmission = 1
+	limiter.maintenanceInterval = 0
+
+	assert.True(t, limiter.TryAcquire("old", "client-a"), "first key")
+	assert.True(t, limiter.TryAcquire("newer", "client-b"), "second key")
+	assert.False(t, limiter.TryAcquire("third", "client-c"), "new key at the cap")
 
 	now = now.Add(16 * time.Minute)
-	limiter.TryAcquire("fresh")
-	assert.Len(t, limiter.attempts, 1, "idle keys were not pruned")
+	assert.True(t, limiter.TryAcquire("third", "client-c"), "expired keys did not free capacity")
+	assert.Len(t, limiter.keys, 1, "keys after maintenance")
+	assert.Len(t, limiter.admitted, 1, "admission budgets after maintenance")
 }

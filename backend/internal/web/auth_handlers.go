@@ -74,7 +74,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	limiterKey := limitKey(r, email)
 
-	if !h.loginLimiter.TryAcquire(limiterKey) {
+	if !h.loginLimiter.TryAcquire(limiterKey, clientKey(r)) {
 		w.Header().Set("Retry-After", "900")
 		h.render(w, r, "login", http.StatusTooManyRequests, loginPageData{
 			pageData:  h.basePageData(r, "Sign in"),
@@ -134,7 +134,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	// Throttle before any service call so no Argon2 work happens for a refused
 	// registration attempt.
-	if !h.registrationLimiter.TryAcquire(limitKey(r, params.Email)) {
+	if !h.registrationLimiter.TryAcquire(limitKey(r, params.Email), clientKey(r)) {
 		w.Header().Set("Retry-After", "900")
 		h.render(w, r, "register", http.StatusTooManyRequests, registerPageData{
 			pageData:  h.basePageData(r, "Create account"),
@@ -246,6 +246,12 @@ func limitKey(r *http.Request, rawEmail string) string {
 		email = strings.ToLower(strings.TrimSpace(rawEmail))
 	}
 	sum := sha256.Sum256([]byte(strings.ToLower(clientHost(r)) + "|" + email))
+	return hex.EncodeToString(sum[:])
+}
+
+// clientKey identifies the client for limiter admission budgets.
+func clientKey(r *http.Request) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(clientHost(r))))
 	return hex.EncodeToString(sum[:])
 }
 
