@@ -344,7 +344,9 @@ func (s *Service) SetActiveHousehold(ctx context.Context, tokenHash string, user
 	return ErrHouseholdAccess
 }
 
-type queryRower interface {
+// sessionExecer is the write subset shared by the pool and a transaction
+// that insertSession needs.
+type sessionExecer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
@@ -359,12 +361,12 @@ func (s *Service) createSession(ctx context.Context, user User) (Session, error)
 
 func insertSession(
 	ctx context.Context,
-	query queryRower,
+	db sessionExecer,
 	user User,
 	rawToken, tokenHash string,
 	expiresAt time.Time,
 ) (Session, error) {
-	if _, err := query.Exec(ctx, `
+	if _, err := db.Exec(ctx, `
 		INSERT INTO sessions (token_hash, user_id, expires_at)
 		VALUES ($1, $2, $3)`,
 		tokenHash, user.ID, expiresAt,
