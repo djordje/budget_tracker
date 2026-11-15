@@ -4,9 +4,11 @@ package reporting
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,14 +43,12 @@ func newReportFixture(t *testing.T) *reportFixture {
 	member := registerReportUser(t, authService, "member@example.com")
 	outsider := registerReportUser(t, authService, "outsider@example.com")
 	household, err := householdService.CreateAndActivate(ctx, admin.User.ID, admin.TokenHash, "Home")
-	if err != nil {
-		t.Fatalf("create household: %v", err)
-	}
+	require.NoError(t, err, "create household")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO household_memberships (household_id, user_id, role)
 		VALUES ($1, $2, 'member')`, household.ID, member.User.ID,
 	); err != nil {
-		t.Fatalf("add member: %v", err)
+		require.NoError(t, err, "add member")
 	}
 
 	return &reportFixture{
@@ -71,7 +71,7 @@ func registerReportUser(t *testing.T, service *auth.Service, email string) auth.
 		Password:  "correct horse battery staple",
 	})
 	if err != nil {
-		t.Fatalf("register %s: %v", email, err)
+		require.NoError(t, err, "register %s", email)
 	}
 	return session
 }
@@ -92,7 +92,7 @@ func (f *reportFixture) entry(t *testing.T, actor uuid.UUID, kind finance.Kind, 
 		HouseholdWide: householdWide,
 	})
 	if err != nil {
-		t.Fatalf("create %s entry: %v", kind, err)
+		require.NoError(t, err, "create %s entry", kind)
 	}
 	return entry
 }
@@ -108,7 +108,7 @@ func (f *reportFixture) rate(t *testing.T, from, to, value string, day time.Time
 		RateDate:         day,
 		IsMonthly:        monthly,
 	}); err != nil {
-		t.Fatalf("create exchange rate %s/%s: %v", from, to, err)
+		require.NoError(t, err, "create exchange rate %s/%s", from, to)
 	}
 }
 
@@ -133,69 +133,50 @@ func TestSummaryConversionScopesAndMissingRates(t *testing.T) {
 		DisplayCurrency: "RSD",
 	}
 	summary, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("Summary() error = %v", err)
-	}
-	if summary.IncomeMinor != 210000 {
-		t.Errorf("income = %d, want 210000", summary.IncomeMinor)
-	}
-	if summary.SpendingMinor != 122500 {
-		t.Errorf("spending = %d, want 122500", summary.SpendingMinor)
-	}
-	if summary.NetMinor != 87500 {
-		t.Errorf("net = %d, want 87500", summary.NetMinor)
-	}
-	if summary.EntryCount != 4 || summary.IncludedEntryCount != 4 || !summary.Complete {
-		t.Errorf("summary completeness = %+v", summary)
-	}
+	require.NoError(t, err, "Summary() error")
+	assert.Equal(t, int64(210000), summary.IncomeMinor, "income")
+	assert.Equal(t, int64(122500), summary.SpendingMinor, "spending")
+	assert.Equal(t, int64(87500), summary.NetMinor, "net")
+	assert.Equal(t, 4, summary.EntryCount, "summary = %+v", summary)
+	assert.Equal(t, 4, summary.IncludedEntryCount, "summary = %+v", summary)
+	assert.True(t, summary.Complete, "summary = %+v", summary)
 
 	params.ActorID = fixture.admin.User.ID
 	params.Scope = finance.ScopeMine
 	mine, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("admin mine Summary() error = %v", err)
-	}
-	if mine.IncomeMinor != 10000 || mine.SpendingMinor != 117500 || mine.EntryCount != 2 {
-		t.Errorf("admin mine = %+v, want only personal entries", mine)
-	}
+	require.NoError(t, err, "admin mine Summary() error")
+	assert.Equal(t, int64(10000), mine.IncomeMinor, "admin mine = %+v", mine)
+	assert.Equal(t, int64(117500), mine.SpendingMinor, "admin mine = %+v", mine)
+	assert.Equal(t, 2, mine.EntryCount, "admin mine = %+v", mine)
 
 	params.ActorID = fixture.member.User.ID
 	memberMine, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("member mine Summary() error = %v", err)
-	}
-	if memberMine.IncomeMinor != 200000 || memberMine.EntryCount != 1 {
-		t.Errorf("member mine = %+v", memberMine)
-	}
+	require.NoError(t, err, "member mine Summary() error")
+	assert.Equal(t, int64(200000), memberMine.IncomeMinor, "member mine = %+v", memberMine)
+	assert.Equal(t, 1, memberMine.EntryCount, "member mine = %+v", memberMine)
 
 	params.Scope = finance.ScopeAll
-	if _, err := fixture.reporting.Summary(ctx, params); !errors.Is(err, finance.ErrForbidden) {
-		t.Errorf("member all error = %v, want ErrForbidden", err)
-	}
+	_, err = fixture.reporting.Summary(ctx, params)
+	assert.ErrorIs(t, err, finance.ErrForbidden, "member Summary(all)")
 
 	params.ActorID = fixture.outsider.User.ID
 	params.Scope = finance.ScopeMine
-	if _, err := fixture.reporting.Summary(ctx, params); !errors.Is(err, finance.ErrNotFound) {
-		t.Errorf("outsider error = %v, want ErrNotFound", err)
-	}
+	_, err = fixture.reporting.Summary(ctx, params)
+	assert.ErrorIs(t, err, finance.ErrNotFound, "outsider Summary()")
 
 	fixture.entry(t, fixture.admin.User.ID, finance.KindSpending, "5", "GBP", reportDate(2026, 10, 15), false)
 	params.ActorID = fixture.admin.User.ID
 	params.Scope = finance.ScopeAll
 	incomplete, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("incomplete Summary() error = %v", err)
-	}
-	if incomplete.Complete || incomplete.MissingEntryCount != 1 || len(incomplete.MissingRates) != 1 {
-		t.Errorf("missing-rate summary = %+v", incomplete)
-	}
-	if incomplete.SpendingMinor != 122500 {
-		t.Errorf("incomplete spending = %d, want unchanged 122500", incomplete.SpendingMinor)
-	}
+	require.NoError(t, err, "incomplete Summary() error")
+	assert.False(t, incomplete.Complete, "missing-rate summary = %+v", incomplete)
+	assert.Equal(t, 1, incomplete.MissingEntryCount, "missing-rate summary = %+v", incomplete)
+	require.Len(t, incomplete.MissingRates, 1, "missing-rate summary = %+v", incomplete)
+	assert.Equal(t, int64(122500), incomplete.SpendingMinor, "incomplete spending")
 	missing := incomplete.MissingRates[0]
-	if missing.FromCurrencyCode != "GBP" || missing.ToCurrencyCode != "RSD" || missing.EntryDate != "2026-10-15" {
-		t.Errorf("missing rate = %+v", missing)
-	}
+	assert.Equal(t, "GBP", missing.FromCurrencyCode, "missing rate = %+v", missing)
+	assert.Equal(t, "RSD", missing.ToCurrencyCode, "missing rate = %+v", missing)
+	assert.Equal(t, "2026-10-15", missing.EntryDate, "missing rate = %+v", missing)
 }
 
 func TestSummaryDateBoundariesAndRounding(t *testing.T) {
@@ -215,15 +196,12 @@ func TestSummaryDateBoundariesAndRounding(t *testing.T) {
 		DisplayCurrency: "RSD",
 	}
 	summary, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("Summary() error = %v", err)
-	}
-	if summary.IncludedEntryCount != 1 || summary.MissingEntryCount != 1 || summary.SpendingMinor != 10000 {
-		t.Errorf("date boundary summary = %+v", summary)
-	}
-	if len(summary.MissingRates) != 1 || summary.MissingRates[0].EntryDate != "2026-10-16" {
-		t.Errorf("missing dates = %+v", summary.MissingRates)
-	}
+	require.NoError(t, err, "Summary() error")
+	assert.Equal(t, 1, summary.IncludedEntryCount, "date boundary summary = %+v", summary)
+	assert.Equal(t, 1, summary.MissingEntryCount, "date boundary summary = %+v", summary)
+	assert.Equal(t, int64(10000), summary.SpendingMinor, "date boundary summary = %+v", summary)
+	require.Len(t, summary.MissingRates, 1, "missing dates")
+	assert.Equal(t, "2026-10-16", summary.MissingRates[0].EntryDate, "missing dates")
 
 	// Monthly rates apply across the calendar month and stop at the boundary.
 	fixture.rate(t, "USD", "RSD", "100", reportDate(2026, 10, 1), true)
@@ -231,15 +209,9 @@ func TestSummaryDateBoundariesAndRounding(t *testing.T) {
 	fixture.entry(t, fixture.admin.User.ID, finance.KindIncome, "1", "USD", reportDate(2026, 11, 1), false)
 	params.To = reportDate(2026, 11, 30)
 	summary, err = fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("monthly Summary() error = %v", err)
-	}
-	if summary.IncomeMinor != 10000 {
-		t.Errorf("monthly income = %d, want 10000", summary.IncomeMinor)
-	}
-	if summary.MissingEntryCount != 2 {
-		t.Errorf("monthly missing count = %d, want 2", summary.MissingEntryCount)
-	}
+	require.NoError(t, err, "monthly Summary() error")
+	assert.Equal(t, int64(10000), summary.IncomeMinor, "monthly income")
+	assert.Equal(t, 2, summary.MissingEntryCount, "monthly missing count")
 
 	// Rate rounding happens at display minor-unit precision, half-even.
 	fixture.rate(t, "RSD", "EUR", "0.1", reportDate(2026, 10, 15), false)
@@ -249,15 +221,10 @@ func TestSummaryDateBoundariesAndRounding(t *testing.T) {
 	params.From = reportDate(2026, 10, 15)
 	params.To = reportDate(2026, 10, 15)
 	summary, err = fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("rounding Summary() error = %v", err)
-	}
-	if summary.IncomeMinor != 510 {
-		t.Errorf("rounded income = %d, want 510 (5.10 EUR)", summary.IncomeMinor)
-	}
-	if summary.DisplayCurrency != "EUR" || summary.DisplayMinorUnits != 2 {
-		t.Errorf("display currency = %s/%d", summary.DisplayCurrency, summary.DisplayMinorUnits)
-	}
+	require.NoError(t, err, "rounding Summary() error")
+	assert.Equal(t, int64(510), summary.IncomeMinor, "rounded income")
+	assert.Equal(t, "EUR", summary.DisplayCurrency, "display currency")
+	assert.Equal(t, int32(2), summary.DisplayMinorUnits, "display minor units")
 }
 
 func TestSummaryDefaultsAndValidation(t *testing.T) {
@@ -267,7 +234,7 @@ func TestSummaryDefaultsAndValidation(t *testing.T) {
 	if _, err := fixture.pool.Exec(ctx, `
 		UPDATE household_options SET default_display_currency_code = 'EUR'
 		WHERE household_id = $1`, fixture.householdID); err != nil {
-		t.Fatalf("set display default: %v", err)
+		require.NoError(t, err, "set display default")
 	}
 
 	params := SummaryParams{
@@ -278,43 +245,34 @@ func TestSummaryDefaultsAndValidation(t *testing.T) {
 		To:          reportDate(2026, 10, 31),
 	}
 	summary, err := fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("Summary() error = %v", err)
-	}
-	if summary.DisplayCurrency != "EUR" || !summary.Complete || summary.EntryCount != 0 {
-		t.Errorf("default summary = %+v", summary)
-	}
+	require.NoError(t, err, "Summary() error")
+	assert.Equal(t, "EUR", summary.DisplayCurrency, "default summary = %+v", summary)
+	assert.True(t, summary.Complete, "default summary = %+v", summary)
+	assert.Zero(t, summary.EntryCount, "default summary = %+v", summary)
 
 	displayOverride := "USD"
 	if _, err := households.NewService(fixture.pool).SetUserOptions(ctx, fixture.admin.User.ID, fixture.householdID, households.UpdateUserOptionsParams{
 		DefaultDisplayCurrencyCode: &displayOverride,
 	}); err != nil {
-		t.Fatalf("set display override: %v", err)
+		require.NoError(t, err, "set display override")
 	}
 	summary, err = fixture.reporting.Summary(ctx, params)
-	if err != nil {
-		t.Fatalf("Summary() with override error = %v", err)
-	}
-	if summary.DisplayCurrency != "USD" {
-		t.Errorf("override display currency = %q, want USD", summary.DisplayCurrency)
-	}
+	require.NoError(t, err, "Summary() with override error")
+	assert.Equal(t, "USD", summary.DisplayCurrency, "override display currency")
 
 	params.DisplayCurrency = "XXX"
-	if _, err := fixture.reporting.Summary(ctx, params); err == nil {
-		t.Error("invalid display currency error = nil")
-	}
+	_, err = fixture.reporting.Summary(ctx, params)
+	assert.Error(t, err, "invalid display currency should be rejected")
 
 	params.DisplayCurrency = "RSD"
 	params.From = time.Time{}
-	if _, err := fixture.reporting.Summary(ctx, params); err == nil {
-		t.Error("missing from date error = nil")
-	}
+	_, err = fixture.reporting.Summary(ctx, params)
+	assert.Error(t, err, "missing from date should be rejected")
 
 	params.From = reportDate(2026, 10, 31)
 	params.To = reportDate(2026, 10, 1)
-	if _, err := fixture.reporting.Summary(ctx, params); err == nil {
-		t.Error("reversed date range error = nil")
-	}
+	_, err = fixture.reporting.Summary(ctx, params)
+	assert.Error(t, err, "reversed date range should be rejected")
 }
 
 func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
@@ -340,7 +298,7 @@ func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
 				"UPDATE household_options SET default_display_currency_code = $1 WHERE household_id = $2",
 				display, fixture.householdID,
 			); err != nil {
-				t.Errorf("update display currency: %v", err)
+				assert.NoError(t, err, "update display currency")
 				return
 			}
 			if _, err := fixture.pool.Exec(ctx, `
@@ -352,7 +310,7 @@ func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
 				DO UPDATE SET rate = EXCLUDED.rate, updated_at = now()`,
 				fixture.householdID, "117.5", reportDate(2026, 10, 15),
 			); err != nil {
-				t.Errorf("upsert rate: %v", err)
+				assert.NoError(t, err, "upsert rate")
 				return
 			}
 			if _, err := fixture.finance.Create(ctx, finance.CreateParams{
@@ -363,32 +321,21 @@ func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
 				CurrencyCode: "EUR",
 				EntryDate:    reportDate(2026, 10, 15),
 			}); err != nil {
-				t.Errorf("create concurrent entry: %v", err)
+				assert.NoError(t, err, "create concurrent entry")
 				return
 			}
 		}
 	}
 
 	check := func(summary Summary) {
-		if summary.IncludedEntryCount+summary.MissingEntryCount != summary.EntryCount {
-			t.Errorf("mixed snapshot: included %d + missing %d != entries %d",
-				summary.IncludedEntryCount, summary.MissingEntryCount, summary.EntryCount)
-		}
-		if summary.Complete != (summary.MissingEntryCount == 0) {
-			t.Errorf("complete = %v with %d missing entries", summary.Complete, summary.MissingEntryCount)
-		}
-		if summary.NetMinor != summary.IncomeMinor-summary.SpendingMinor {
-			t.Errorf("net = %d, want %d", summary.NetMinor, summary.IncomeMinor-summary.SpendingMinor)
-		}
+		assert.Equal(t, summary.EntryCount, summary.IncludedEntryCount+summary.MissingEntryCount, "mixed snapshot")
+		assert.Equal(t, summary.MissingEntryCount == 0, summary.Complete, "complete with %d missing entries", summary.MissingEntryCount)
+		assert.Equal(t, summary.IncomeMinor-summary.SpendingMinor, summary.NetMinor, "net")
 		switch summary.DisplayCurrency {
 		case "RSD":
-			if summary.DisplayMinorUnits != 2 {
-				t.Errorf("RSD minor units = %d, want 2", summary.DisplayMinorUnits)
-			}
+			assert.Equal(t, int32(2), summary.DisplayMinorUnits, "RSD minor units")
 		case "JPY":
-			if summary.DisplayMinorUnits != 0 {
-				t.Errorf("JPY minor units = %d, want 0", summary.DisplayMinorUnits)
-			}
+			assert.Zero(t, summary.DisplayMinorUnits, "JPY minor units")
 		}
 	}
 
@@ -406,7 +353,7 @@ func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
 			for range 50 {
 				summary, err := fixture.reporting.Summary(ctx, params)
 				if err != nil {
-					t.Errorf("Summary() error = %v", err)
+					assert.NoError(t, err, "Summary()")
 					return
 				}
 				check(summary)
