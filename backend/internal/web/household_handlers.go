@@ -84,8 +84,9 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 
 // HouseholdSettings serves household settings for admins.
 func (h *Handler) HouseholdSettings(w http.ResponseWriter, r *http.Request) {
-	householdID, ok := householdIDFromPath(w, r)
-	if !ok {
+	householdID, err := householdIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
 	data, err := h.settingsData(r, householdID)
@@ -98,8 +99,9 @@ func (h *Handler) HouseholdSettings(w http.ResponseWriter, r *http.Request) {
 
 // UpdateHousehold renames a household.
 func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
-	householdID, ok := householdIDFromPath(w, r)
-	if !ok {
+	householdID, err := householdIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
 	session, ok := auth.FromContext(r.Context())
@@ -113,7 +115,7 @@ func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.FormValue("name")
 
-	_, err := h.households.Rename(r.Context(), session.User.ID, householdID, name)
+	_, err = h.households.Rename(r.Context(), session.User.ID, householdID, name)
 	if err != nil {
 		var validation *households.ValidationError
 		switch {
@@ -170,8 +172,9 @@ func (h *Handler) ActivateHousehold(w http.ResponseWriter, r *http.Request) {
 
 // UpdateHouseholdOptions updates household currency defaults.
 func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request) {
-	householdID, ok := householdIDFromPath(w, r)
-	if !ok {
+	householdID, err := householdIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
 	session, ok := auth.FromContext(r.Context())
@@ -208,8 +211,9 @@ func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request)
 
 // CreateHouseholdInvitation creates a shareable invitation link.
 func (h *Handler) CreateHouseholdInvitation(w http.ResponseWriter, r *http.Request) {
-	householdID, ok := householdIDFromPath(w, r)
-	if !ok {
+	householdID, err := householdIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
 	session, ok := auth.FromContext(r.Context())
@@ -270,8 +274,9 @@ func (h *Handler) CreateHouseholdInvitation(w http.ResponseWriter, r *http.Reque
 
 // RevokeHouseholdInvitation removes a pending invitation.
 func (h *Handler) RevokeHouseholdInvitation(w http.ResponseWriter, r *http.Request) {
-	householdID, ok := householdIDFromPath(w, r)
-	if !ok {
+	householdID, err := householdIDFromPath(r)
+	if err != nil {
+		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
 		return
 	}
 	session, ok := auth.FromContext(r.Context())
@@ -353,13 +358,10 @@ func (h *Handler) renderSettingsError(w http.ResponseWriter, r *http.Request, er
 	}
 }
 
-func householdIDFromPath(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+func householdIDFromPath(r *http.Request) (uuid.UUID, error) {
 	id, err := uuid.Parse(r.PathValue("householdID"))
 	if err != nil {
-		// householdIDFromPath has no handler receiver, so callers render their
-		// own not-found response after this returns false.
-		http.Error(w, "not found", http.StatusNotFound)
-		return uuid.Nil, false
+		return uuid.Nil, errors.New("invalid household ID")
 	}
-	return id, true
+	return id, nil
 }

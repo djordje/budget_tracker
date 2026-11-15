@@ -122,3 +122,31 @@ func TestCreateHouseholdRendersActivationFailure(t *testing.T) {
 	assert.Empty(t, recorder.Header().Get("Location"), "activation failure returned a redirect")
 	assert.Contains(t, recorder.Body.String(), "Session expired")
 }
+
+func TestMalformedHouseholdIDRendersErrorPage(t *testing.T) {
+	handler := newTestHandler(t)
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		handle http.HandlerFunc
+	}{
+		{name: "settings", method: http.MethodGet, path: "/app/households/not-a-uuid/settings", handle: handler.HouseholdSettings},
+		{name: "update", method: http.MethodPost, path: "/app/households/not-a-uuid/settings", handle: handler.UpdateHousehold},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.path, nil)
+			request.SetPathValue("householdID", "not-a-uuid")
+			recorder := httptest.NewRecorder()
+
+			tt.handle(recorder, request)
+
+			require.Equal(t, http.StatusNotFound, recorder.Code, "body = %s", recorder.Body.String())
+			assert.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"), "Content-Type")
+			body := recorder.Body.String()
+			assert.Contains(t, body, `<html lang="en"`, "error response is not the styled page")
+			assert.Contains(t, body, "Household not found", "error response copy")
+		})
+	}
+}
