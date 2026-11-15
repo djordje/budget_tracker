@@ -359,23 +359,6 @@ func (s *Service) invitationByHash(ctx context.Context, hash string) (Invitation
 	return scanInvitation(row)
 }
 
-func (s *Service) invitationByID(ctx context.Context, id uuid.UUID) (Invitation, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT i.id, i.household_id, h.name, i.email_normalized, i.role,
-		       i.invited_by_user_id, i.expires_at, i.accepted_at, i.created_at
-		FROM household_invitations i
-		JOIN households h ON h.id = i.household_id
-		WHERE i.id = $1`, id)
-	invitation, err := scanInvitation(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Invitation{}, ErrNotFound
-	}
-	if err != nil {
-		return Invitation{}, err
-	}
-	return invitation, nil
-}
-
 func scanInvitation(row pgx.Row) (Invitation, error) {
 	var invitation Invitation
 	var role string

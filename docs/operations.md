@@ -44,8 +44,12 @@ migration.
 The rules live in `AGENTS.md` ("Documentation and testing"): Testify
 `assert`/`require`, expected value before actual value, `require` for
 prerequisites and `assert` for independent checks, and no assertion helpers that
-wrap a single comparison. `mise run lint` enforces them with `testifylint`
-configured in `backend/.golangci.yml`.
+wrap a single comparison.
+
+`mise run lint` runs `go vet` and `golangci-lint` for both build-tag modes. The
+configuration enables `errcheck`, `govet`, `ineffassign`, `staticcheck`,
+`testifylint`, and `unused` explicitly over `default: none`, with no exclusions
+or `nolint` directives.
 
 ```sh
 mise run test                # unit tests, no database

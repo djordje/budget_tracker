@@ -8,6 +8,7 @@ linters:
     - ineffassign
     - staticcheck
     - testifylint
+    - unused
   settings:
     testifylint:
       # Decision 5 keeps independent expected-error checks nonfatal, which this
