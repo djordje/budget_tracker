@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing/fstest"
 	"time"
 
@@ -20,18 +23,14 @@ func TestDatabaseSmoke(t *testing.T) {
 	defer cancel()
 
 	pool, err := Open(ctx, integrationDatabaseURL(t))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
+	require.NoError(t, err, "Open() error")
 	defer pool.Close()
 
 	var value int
 	if err := pool.QueryRow(ctx, "SELECT 1").Scan(&value); err != nil {
-		t.Fatalf("query database: %v", err)
+		require.NoError(t, err, "query database")
 	}
-	if value != 1 {
-		t.Errorf("SELECT 1 = %d, want 1", value)
-	}
+	assert.Equal(t, 1, value, "SELECT 1")
 }
 
 func TestMigrateAppliesAndTracksMigrations(t *testing.T) {
@@ -39,53 +38,34 @@ func TestMigrateAppliesAndTracksMigrations(t *testing.T) {
 	ctx := context.Background()
 
 	applied, err := Migrate(ctx, pool, integrationMigrationFixture(), "migrations")
-	if err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
-	if len(applied) != 2 {
-		t.Fatalf("applied %d migrations, want 2", len(applied))
-	}
+	require.NoError(t, err, "Migrate() error")
+	require.Len(t, applied, 2, "applied migrations")
 
 	if _, err := pool.Exec(ctx, "INSERT INTO things (id, name) VALUES (1, 'first')"); err != nil {
-		t.Fatalf("insert migrated row: %v", err)
+		require.NoError(t, err, "insert migrated row")
 	}
 	var name string
 	if err := pool.QueryRow(ctx, "SELECT name FROM things WHERE id = 1").Scan(&name); err != nil {
-		t.Fatalf("query migrated row: %v", err)
+		require.NoError(t, err, "query migrated row")
 	}
-	if name != "first" {
-		t.Errorf("name = %q, want first", name)
-	}
+	assert.Equal(t, "first", name, "name")
 
 	var recorded int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&recorded); err != nil {
-		t.Fatalf("query schema_migrations: %v", err)
+		require.NoError(t, err, "query schema_migrations")
 	}
-	if recorded != 2 {
-		t.Errorf("schema_migrations count = %d, want 2", recorded)
-	}
+	assert.Equal(t, 2, recorded, "schema_migrations count")
 
 	records, err := AppliedMigrations(ctx, pool)
-	if err != nil {
-		t.Fatalf("AppliedMigrations() error = %v", err)
-	}
-	if len(records) != 2 {
-		t.Fatalf("AppliedMigrations() returned %d records, want 2", len(records))
-	}
-	if records[0].Version != 1 || records[1].Version != 2 {
-		t.Errorf("AppliedMigrations() versions = %d, %d", records[0].Version, records[1].Version)
-	}
-	if records[0].AppliedAt.IsZero() {
-		t.Error("AppliedMigrations() returned a zero applied time")
-	}
+	require.NoError(t, err, "AppliedMigrations() error")
+	require.Len(t, records, 2, "applied migration records")
+	assert.Equal(t, int64(1), records[0].Version, "AppliedMigrations() versions")
+	assert.Equal(t, int64(2), records[1].Version, "AppliedMigrations() versions")
+	assert.False(t, records[0].AppliedAt.IsZero(), "AppliedMigrations() applied time")
 
 	applied, err = Migrate(ctx, pool, integrationMigrationFixture(), "migrations")
-	if err != nil {
-		t.Fatalf("second Migrate() error = %v", err)
-	}
-	if len(applied) != 0 {
-		t.Errorf("second Migrate() applied %d migrations, want 0", len(applied))
-	}
+	require.NoError(t, err, "second Migrate() error")
+	assert.Empty(t, applied, "second Migrate() applied migrations")
 }
 
 func TestMigrateRejectsChangedMigration(t *testing.T) {
@@ -93,7 +73,7 @@ func TestMigrateRejectsChangedMigration(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := Migrate(ctx, pool, integrationMigrationFixture(), "migrations"); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
+		require.NoError(t, err, "Migrate()")
 	}
 
 	changed := fstest.MapFS{
@@ -108,12 +88,8 @@ func TestMigrateRejectsChangedMigration(t *testing.T) {
 		},
 	}
 	_, err := Migrate(ctx, pool, changed, "migrations")
-	if err == nil {
-		t.Fatal("Migrate() error = nil, want checksum error")
-	}
-	if !strings.Contains(err.Error(), "changed") {
-		t.Errorf("error = %v, want changed migration error", err)
-	}
+	require.Error(t, err, "Migrate() with a changed migration")
+	assert.ErrorContains(t, err, "changed")
 	assertMigrationNotApplied(t, ctx, pool, "should_not_run", 2)
 }
 
@@ -130,7 +106,7 @@ func TestMigrateRejectsBackfilledPendingMigration(t *testing.T) {
 		},
 	}
 	if _, err := Migrate(ctx, pool, versionsOneAndThree, "migrations"); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
+		require.NoError(t, err, "Migrate()")
 	}
 
 	backfilled := fstest.MapFS{
@@ -145,12 +121,8 @@ func TestMigrateRejectsBackfilledPendingMigration(t *testing.T) {
 		},
 	}
 	_, err := Migrate(ctx, pool, backfilled, "migrations")
-	if err == nil {
-		t.Fatal("Migrate() error = nil, want backfilled migration error")
-	}
-	if !strings.Contains(err.Error(), "older than applied") {
-		t.Errorf("error = %v, want backfilled migration error", err)
-	}
+	require.Error(t, err, "Migrate() with a backfilled migration")
+	assert.ErrorContains(t, err, "older than applied")
 	assertMigrationNotApplied(t, ctx, pool, "should_not_run", 2)
 }
 
@@ -159,19 +131,15 @@ func assertMigrationNotApplied(t *testing.T, ctx context.Context, pool *pgxpool.
 
 	var exists bool
 	if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
-		t.Fatalf("check table %s: %v", table, err)
+		require.NoError(t, err, "check table %s", table)
 	}
-	if exists {
-		t.Errorf("migration created %s even though preflight should have rejected the history", table)
-	}
+	assert.False(t, exists, "migration created %s even though preflight should have rejected the history", table)
 
 	var recorded int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&recorded); err != nil {
-		t.Fatalf("query schema_migrations: %v", err)
+		require.NoError(t, err, "query schema_migrations")
 	}
-	if recorded != wantRecords {
-		t.Errorf("schema_migrations count = %d, want %d", recorded, wantRecords)
-	}
+	assert.Equal(t, wantRecords, recorded, "schema_migrations count")
 }
 
 func TestMigrateRollsBackFailedMigration(t *testing.T) {
@@ -187,28 +155,20 @@ func TestMigrateRollsBackFailedMigration(t *testing.T) {
 		},
 	}
 	applied, err := Migrate(ctx, pool, broken, "migrations")
-	if err == nil {
-		t.Fatal("Migrate() error = nil, want error")
-	}
-	if len(applied) != 1 {
-		t.Errorf("applied %d migrations before failure, want 1", len(applied))
-	}
+	require.Error(t, err, "Migrate() with a broken migration")
+	assert.Len(t, applied, 1, "migrations applied before failure")
 
 	var rolledBack bool
 	if err := pool.QueryRow(ctx, "SELECT to_regclass('should_rollback') IS NULL").Scan(&rolledBack); err != nil {
-		t.Fatalf("check rolled-back table: %v", err)
+		require.NoError(t, err, "check rolled-back table")
 	}
-	if !rolledBack {
-		t.Error("failed migration left its table behind")
-	}
+	assert.True(t, rolledBack, "failed migration left its table behind")
 
 	var recorded int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&recorded); err != nil {
-		t.Fatalf("query schema_migrations: %v", err)
+		require.NoError(t, err, "query schema_migrations")
 	}
-	if recorded != 1 {
-		t.Errorf("schema_migrations count = %d, want 1", recorded)
-	}
+	assert.Equal(t, 1, recorded, "schema_migrations count")
 
 	fixed := fstest.MapFS{
 		"migrations/0001_create_things.sql": {
@@ -219,12 +179,8 @@ func TestMigrateRollsBackFailedMigration(t *testing.T) {
 		},
 	}
 	applied, err = Migrate(ctx, pool, fixed, "migrations")
-	if err != nil {
-		t.Fatalf("Migrate() after fix error = %v", err)
-	}
-	if len(applied) != 1 {
-		t.Errorf("applied %d migrations after fix, want 1", len(applied))
-	}
+	require.NoError(t, err, "Migrate() after fix error")
+	assert.Len(t, applied, 1, "migrations applied after fix")
 }
 
 func TestMigrateRejectsMissingAppliedMigration(t *testing.T) {
@@ -232,7 +188,7 @@ func TestMigrateRejectsMissingAppliedMigration(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := Migrate(ctx, pool, integrationMigrationFixture(), "migrations"); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
+		require.NoError(t, err, "Migrate()")
 	}
 
 	missing := fstest.MapFS{
@@ -241,12 +197,8 @@ func TestMigrateRejectsMissingAppliedMigration(t *testing.T) {
 		},
 	}
 	_, err := Migrate(ctx, pool, missing, "migrations")
-	if err == nil {
-		t.Fatal("Migrate() error = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "missing") {
-		t.Errorf("error = %v, want missing migration error", err)
-	}
+	require.Error(t, err, "Migrate() with a missing applied migration")
+	assert.ErrorContains(t, err, "missing")
 }
 
 func integrationDatabaseURL(t *testing.T) string {
@@ -266,21 +218,19 @@ func newIntegrationSchemaPool(t *testing.T) *pgxpool.Pool {
 	defer cancel()
 
 	admin, err := Open(ctx, dsn)
-	if err != nil {
-		t.Fatalf("open admin database pool: %v", err)
-	}
+	require.NoError(t, err, "open admin database pool")
 
 	schema := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	quotedSchema := pgx.Identifier{schema}.Sanitize()
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+quotedSchema); err != nil {
 		admin.Close()
-		t.Fatalf("create test schema: %v", err)
+		require.NoError(t, err, "create test schema")
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		admin.Close()
-		t.Fatalf("parse test database URL: %v", err)
+		require.NoError(t, err, "parse test database URL")
 	}
 	poolConfig.MaxConns = 4
 	poolConfig.ConnConfig.RuntimeParams["search_path"] = schema
@@ -288,12 +238,12 @@ func newIntegrationSchemaPool(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		admin.Close()
-		t.Fatalf("create test schema pool: %v", err)
+		require.NoError(t, err, "create test schema pool")
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		admin.Close()
-		t.Fatalf("ping test schema: %v", err)
+		require.NoError(t, err, "ping test schema")
 	}
 
 	t.Cleanup(func() {
