@@ -3,47 +3,32 @@ package auth
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHashPasswordRoundTrip(t *testing.T) {
 	password := "correct horse battery staple"
 	encoded, err := HashPassword(password)
-	if err != nil {
-		t.Fatalf("HashPassword() error = %v", err)
-	}
-	if !strings.HasPrefix(encoded, "$argon2id$v=19$") {
-		t.Errorf("hash has unexpected prefix: %q", encoded)
-	}
+	require.NoError(t, err, "HashPassword()")
+	assert.True(t, strings.HasPrefix(encoded, "$argon2id$v=19$"), "hash prefix = %q", encoded)
 
 	matches, err := VerifyPassword(encoded, password)
-	if err != nil {
-		t.Fatalf("VerifyPassword() error = %v", err)
-	}
-	if !matches {
-		t.Error("VerifyPassword() = false, want true")
-	}
+	require.NoError(t, err, "VerifyPassword()")
+	assert.True(t, matches, "VerifyPassword() = false, want true")
 
 	matches, err = VerifyPassword(encoded, "wrong password")
-	if err != nil {
-		t.Fatalf("VerifyPassword() error = %v", err)
-	}
-	if matches {
-		t.Error("VerifyPassword() = true for wrong password")
-	}
+	require.NoError(t, err, "VerifyPassword()")
+	assert.False(t, matches, "VerifyPassword() = true for wrong password")
 }
 
 func TestHashPasswordUsesFreshSalt(t *testing.T) {
 	first, err := HashPassword("same password")
-	if err != nil {
-		t.Fatalf("HashPassword() error = %v", err)
-	}
+	require.NoError(t, err, "HashPassword()")
 	second, err := HashPassword("same password")
-	if err != nil {
-		t.Fatalf("HashPassword() error = %v", err)
-	}
-	if first == second {
-		t.Error("passwords with the same input produced identical hashes")
-	}
+	require.NoError(t, err, "HashPassword()")
+	assert.NotEqual(t, first, second, "passwords with the same input produced identical hashes")
 }
 
 func TestVerifyPasswordRejectsMalformedHash(t *testing.T) {
@@ -56,8 +41,7 @@ func TestVerifyPasswordRejectsMalformedHash(t *testing.T) {
 	}
 
 	for _, encoded := range tests {
-		if _, err := VerifyPassword(encoded, "password"); err == nil {
-			t.Errorf("VerifyPassword(%q) error = nil, want error", encoded)
-		}
+		_, err := VerifyPassword(encoded, "password")
+		assert.Error(t, err, "VerifyPassword(%q)", encoded)
 	}
 }

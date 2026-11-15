@@ -6,6 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 )
 
@@ -20,21 +23,15 @@ func TestMaybeDeleteExpiredSessionsRunsAtMostHourly(t *testing.T) {
 	}
 
 	service.maybeDeleteExpiredSessions(context.Background())
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("cleanup calls = %d, want 1", got)
-	}
+	require.Equal(t, int32(1), calls.Load(), "cleanup calls")
 
 	clock = clock.Add(59 * time.Minute)
 	service.maybeDeleteExpiredSessions(context.Background())
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("cleanup calls = %d, want 1 after an hour has not elapsed", got)
-	}
+	require.Equal(t, int32(1), calls.Load(), "cleanup calls after an hour has not elapsed")
 
 	clock = clock.Add(2 * time.Minute)
 	service.maybeDeleteExpiredSessions(context.Background())
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("cleanup calls = %d, want 2 after an hour elapsed", got)
-	}
+	assert.Equal(t, int32(2), calls.Load(), "cleanup calls after an hour elapsed")
 }
 
 func TestMaybeDeleteExpiredSessionsIsConcurrencySafe(t *testing.T) {
@@ -57,9 +54,7 @@ func TestMaybeDeleteExpiredSessionsIsConcurrencySafe(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("concurrent cleanup calls = %d, want 1", got)
-	}
+	assert.Equal(t, int32(1), calls.Load(), "concurrent cleanup calls")
 }
 
 func TestMaybeDeleteExpiredSessionsLogsFailureWithoutFailing(t *testing.T) {

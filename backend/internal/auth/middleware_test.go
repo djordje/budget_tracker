@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,12 +45,8 @@ func TestMiddlewareLoadsSession(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
-	if !ok {
-		t.Fatal("FromContext() did not return a session")
-	}
-	if got.UserID != want.UserID {
-		t.Errorf("session user ID = %v, want %v", got.UserID, want.UserID)
-	}
+	require.True(t, ok, "FromContext() did not return a session")
+	assert.Equal(t, want.UserID, got.UserID, "session user ID")
 }
 
 func TestMiddlewareClearsExpiredSession(t *testing.T) {
@@ -58,9 +57,8 @@ func TestMiddlewareClearsExpiredSession(t *testing.T) {
 	)
 
 	handler := middleware.Load(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := FromContext(r.Context()); ok {
-			t.Error("FromContext() returned a session for an invalid token")
-		}
+		_, ok := FromContext(r.Context())
+		assert.False(t, ok, "FromContext() returned a session for an invalid token")
 	}))
 
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -69,9 +67,8 @@ func TestMiddlewareClearsExpiredSession(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 
 	cookies := recorder.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
-		t.Errorf("clear cookie = %+v, want one expired cookie", cookies)
-	}
+	require.Len(t, cookies, 1, "clear cookie = %+v, want one expired cookie", cookies)
+	assert.Negative(t, cookies[0].MaxAge, "clear cookie = %+v, want one expired cookie", cookies)
 }
 
 func TestMiddlewareKeepsCookieOnTransientError(t *testing.T) {
@@ -87,9 +84,7 @@ func TestMiddlewareKeepsCookieOnTransientError(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
-	if cookies := recorder.Result().Cookies(); len(cookies) != 0 {
-		t.Errorf("transient error cleared session cookie: %+v", cookies)
-	}
+	assert.Empty(t, recorder.Result().Cookies(), "transient error cleared session cookie")
 }
 
 func TestMiddlewareWithoutCookie(t *testing.T) {
@@ -101,13 +96,10 @@ func TestMiddlewareWithoutCookie(t *testing.T) {
 	)
 	handler := middleware.Load(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if _, ok := FromContext(r.Context()); ok {
-			t.Error("FromContext() returned a session without a cookie")
-		}
+		_, ok := FromContext(r.Context())
+		assert.False(t, ok, "FromContext() returned a session without a cookie")
 	}))
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-	if !called {
-		t.Error("next handler was not called")
-	}
+	assert.True(t, called, "next handler was not called")
 }

@@ -3,6 +3,9 @@ package auth
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizeEmail(t *testing.T) {
@@ -24,17 +27,11 @@ func TestNormalizeEmail(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := NormalizeEmail(tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("NormalizeEmail() = %q, want error", got)
-				}
+				require.Error(t, err, "NormalizeEmail(%q) = %q", tt.input, got)
 				return
 			}
-			if err != nil {
-				t.Fatalf("NormalizeEmail() error = %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("NormalizeEmail() = %q, want %q", got, tt.want)
-			}
+			require.NoError(t, err, "NormalizeEmail()")
+			assert.Equal(t, tt.want, got, "NormalizeEmail()")
 		})
 	}
 }
@@ -47,12 +44,8 @@ func TestValidateRegistration(t *testing.T) {
 		Password:  "correct horse battery staple",
 	}
 	email, err := validateRegistration(valid)
-	if err != nil {
-		t.Fatalf("validateRegistration() error = %v", err)
-	}
-	if email != "ada@example.com" {
-		t.Errorf("email = %q, want ada@example.com", email)
-	}
+	require.Nil(t, err, "validateRegistration()")
+	assert.Equal(t, "ada@example.com", email, "email")
 
 	tests := []struct {
 		name  string
@@ -72,13 +65,11 @@ func TestValidateRegistration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// validateRegistration returns *ValidationError, so a nil result is a
+			// typed nil: require.Error would see a non-nil error interface.
 			_, err := validateRegistration(tt.param)
-			if err == nil {
-				t.Fatal("validateRegistration() error = nil, want error")
-			}
-			if _, ok := err.Fields[tt.field]; !ok {
-				t.Errorf("fields = %v, want %q", err.Fields, tt.field)
-			}
+			require.NotNil(t, err, "validateRegistration()")
+			assert.Contains(t, err.Fields, tt.field, "fields = %v", err.Fields)
 		})
 	}
 }
@@ -90,7 +81,5 @@ func TestValidateRegistrationAcceptsUnicodeNames(t *testing.T) {
 		Email:     "ana@example.com",
 		Password:  "correct horse battery",
 	})
-	if err != nil {
-		t.Fatalf("validateRegistration() error = %v", err)
-	}
+	assert.Nil(t, err, "validateRegistration()")
 }

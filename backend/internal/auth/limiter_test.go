@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 	"time"
 )
 
@@ -12,24 +14,15 @@ func TestLoginLimiterReservesAtomicallyAndExpires(t *testing.T) {
 	limiter := newLoginLimiter(2, time.Minute, func() time.Time { return now })
 	const key = "hashed-key"
 
-	if !limiter.TryAcquire(key) || !limiter.TryAcquire(key) {
-		t.Fatal("fresh limiter did not admit the allowed attempts")
-	}
-	if limiter.TryAcquire(key) {
-		t.Fatal("limit was not enforced")
-	}
-	if !limiter.TryAcquire("other") {
-		t.Fatal("one key affected another key")
-	}
+	assert.True(t, limiter.TryAcquire(key), "first fresh attempt")
+	assert.True(t, limiter.TryAcquire(key), "second fresh attempt")
+	assert.False(t, limiter.TryAcquire(key), "limit was not enforced")
+	assert.True(t, limiter.TryAcquire("other"), "one key affected another key")
 
 	now = now.Add(61 * time.Second)
-	if !limiter.TryAcquire(key) {
-		t.Fatal("attempts did not expire")
-	}
+	assert.True(t, limiter.TryAcquire(key), "attempts did not expire")
 	limiter.Reset(key)
-	if !limiter.TryAcquire(key) {
-		t.Fatal("reset did not clear attempts")
-	}
+	assert.True(t, limiter.TryAcquire(key), "reset did not clear attempts")
 }
 
 func TestLoginLimiterConcurrentAdmissions(t *testing.T) {
@@ -49,9 +42,7 @@ func TestLoginLimiterConcurrentAdmissions(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := admitted.Load(); got != 5 {
-		t.Errorf("admitted attempts = %d, want 5", got)
-	}
+	assert.Equal(t, int32(5), admitted.Load(), "admitted attempts")
 }
 
 func TestLoginLimiterMaintainsBoundsAndEvictsOldest(t *testing.T) {
@@ -66,19 +57,11 @@ func TestLoginLimiterMaintainsBoundsAndEvictsOldest(t *testing.T) {
 	now = now.Add(time.Second)
 	limiter.TryAcquire("newest")
 
-	if len(limiter.attempts) > 2 {
-		t.Errorf("limiter holds %d keys, want at most 2", len(limiter.attempts))
-	}
-	if _, ok := limiter.attempts["old"]; ok {
-		t.Error("oldest key was not evicted")
-	}
-	if _, ok := limiter.attempts["newest"]; !ok {
-		t.Error("newest key was evicted")
-	}
+	assert.LessOrEqual(t, len(limiter.attempts), 2, "limiter keys")
+	assert.NotContains(t, limiter.attempts, "old", "oldest key was not evicted")
+	assert.Contains(t, limiter.attempts, "newest", "newest key was evicted")
 
 	now = now.Add(16 * time.Minute)
 	limiter.TryAcquire("fresh")
-	if len(limiter.attempts) != 1 {
-		t.Errorf("idle keys were not pruned: %d keys remain", len(limiter.attempts))
-	}
+	assert.Len(t, limiter.attempts, 1, "idle keys were not pruned")
 }

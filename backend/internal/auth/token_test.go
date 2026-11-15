@@ -3,47 +3,32 @@ package auth
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSessionToken(t *testing.T) {
 	raw, hash, err := newSessionToken()
-	if err != nil {
-		t.Fatalf("newSessionToken() error = %v", err)
-	}
-	if raw == "" {
-		t.Fatal("raw token is empty")
-	}
-	if len(hash) != 64 {
-		t.Errorf("hash length = %d, want 64", len(hash))
-	}
-	if _, err := hex.DecodeString(hash); err != nil {
-		t.Errorf("hash is not hexadecimal: %v", err)
-	}
-	if hash != hashSessionToken(raw) {
-		t.Error("returned hash does not match hashSessionToken")
-	}
+	require.NoError(t, err, "newSessionToken()")
+	assert.NotEmpty(t, raw, "raw token is empty")
+	assert.Len(t, hash, 64, "hash length")
+	_, err = hex.DecodeString(hash)
+	assert.NoError(t, err, "hash is not hexadecimal")
+	assert.Equal(t, hashSessionToken(raw), hash, "returned hash does not match hashSessionToken")
 }
 
 func TestSessionTokensAreUnique(t *testing.T) {
 	first, _, err := newSessionToken()
-	if err != nil {
-		t.Fatalf("newSessionToken() error = %v", err)
-	}
+	require.NoError(t, err, "newSessionToken()")
 	second, _, err := newSessionToken()
-	if err != nil {
-		t.Fatalf("newSessionToken() error = %v", err)
-	}
-	if first == second {
-		t.Error("two generated tokens are identical")
-	}
+	require.NoError(t, err, "newSessionToken()")
+	assert.NotEqual(t, first, second, "two generated tokens are identical")
 }
 
 func TestHashSessionTokenIsStable(t *testing.T) {
 	raw := "known token"
-	if hashSessionToken(raw) != hashSessionToken(raw) {
-		t.Error("hashSessionToken is not deterministic")
-	}
-	if hashSessionToken(raw) == hashSessionToken(raw+"x") {
-		t.Error("different tokens produced the same hash")
-	}
+	first := hashSessionToken(raw)
+	assert.Equal(t, first, hashSessionToken(raw), "hashSessionToken is not deterministic")
+	assert.NotEqual(t, first, hashSessionToken(raw+"x"), "different tokens produced the same hash")
 }
