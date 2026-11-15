@@ -102,7 +102,9 @@ func (c *testClient) registerHTML(t *testing.T, email string) string {
 
 func decodeBody(t *testing.T, response *http.Response, destination any) {
 	t.Helper()
-	defer response.Body.Close()
+	defer func() {
+		assert.NoError(t, response.Body.Close(), "close response body")
+	}()
 	require.NoError(t, json.NewDecoder(response.Body).Decode(destination), "decode response body")
 }
 
@@ -164,7 +166,7 @@ func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+otherID.String(), nil, "")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "cross-household get status")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	graceID := userIDByEmail(t, pool, "grace@example.com")
 	if _, err := pool.Exec(ctx, `
@@ -182,7 +184,7 @@ func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 
 	response = grace.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/members", nil, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member list members status")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/members", nil, "")
 	require.Equal(t, http.StatusOK, response.StatusCode, "admin list members status")
@@ -217,5 +219,5 @@ func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 
 	response = ada.apiRequest(t, http.MethodGet, "/api/v1/households/not-a-uuid", nil, "")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "invalid household ID status")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }

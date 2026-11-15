@@ -161,12 +161,12 @@ func TestEntryHTMLFlow(t *testing.T) {
 
 	response, err = client.follow.Get(client.baseURL + "/app/spendings/" + strconv.FormatInt(memberSpendingID, 10) + "/edit")
 	require.NoError(t, err, "admin GET member entry edit")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "admin edit member entry")
 
 	response, err = member.follow.Get(member.baseURL + "/app/incomes/" + strconv.FormatInt(entryIDByDescription(t, client, "incomes", "Salary"), 10) + "/edit")
 	require.NoError(t, err, "member GET admin entry edit")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "member edit admin entry")
 
 	// Validation preserves values and reports the amount error.
@@ -189,7 +189,7 @@ func TestEntryHTMLRequiresHouseholdAndCSRF(t *testing.T) {
 
 	response, err := client.noRedirect.Get(client.baseURL + "/app/spendings/new")
 	require.NoError(t, err, "GET spending form without household")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "no-household form")
 	assert.Equal(t, "/app", response.Header.Get("Location"), "Location")
 
@@ -197,7 +197,7 @@ func TestEntryHTMLRequiresHouseholdAndCSRF(t *testing.T) {
 	response = client.postForm(t, "/app/spendings", url.Values{
 		"amount": {"1"}, "currency_code": {"RSD"}, "entry_date": {"2026-10-01"},
 	})
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "missing CSRF")
 }
 
@@ -272,7 +272,7 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"entry_date":    {"2026-10-05"},
 		"description":   {"HTMX coffee"},
 	})
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusNoContent, response.StatusCode, "HTMX create")
 	redirect := response.Header.Get("HX-Redirect")
 	assert.Contains(t, redirect, "/app/entries?", "HX-Redirect")
@@ -300,7 +300,7 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"entry_date":    {"2026-10-06"},
 		"description":   {"HTMX lunch"},
 	})
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusNoContent, response.StatusCode, "HTMX update")
 	assert.Contains(t, response.Header.Get("HX-Redirect"), "notice=entry_updated", "HX-Redirect")
 
@@ -308,7 +308,7 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"csrf_token":  {csrf},
 		"return_page": {"1"},
 	})
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusSeeOther, response.StatusCode, "HTMX delete")
 	redirect = response.Header.Get("Location")
 	assert.Contains(t, redirect, "notice=entry_deleted", "delete Location")

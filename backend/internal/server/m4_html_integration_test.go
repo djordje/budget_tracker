@@ -104,7 +104,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	body = readBody(t, response)
 	assert.Contains(t, body, "This invitation is for other@example.com", "mismatch page")
 	response = invitee.postForm(t, "/invitations/"+otherToken, url.Values{"csrf_token": {inviteeCSRF}})
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "mismatch accept")
 
 	var invitationID string

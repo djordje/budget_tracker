@@ -137,18 +137,18 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate_date":          "2026-10-15",
 	}, adminCSRF)
 	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "same currency rate")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	outsiderCSRF := outsider.registerHTML(t, "outsider@example.com")
 	response = outsider.apiRequest(t, http.MethodPatch, "/api/v1/exchange-rates/"+rateID, map[string]any{
 		"rate": "1",
 	}, outsiderCSRF)
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider update")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/exchange-rates/"+rateID, nil, adminCSRF)
 	assert.Equal(t, http.StatusNoContent, response.StatusCode, "delete rate")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/exchange-rates", map[string]any{
 		"from_currency_code": "EUR",
@@ -157,7 +157,7 @@ func TestExchangeRateAPI(t *testing.T) {
 		"rate_date":          "2026-10-15",
 	}, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "rate without CSRF")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }
 
 func TestSummaryAPI(t *testing.T) {
@@ -222,7 +222,7 @@ func TestSummaryAPI(t *testing.T) {
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31", nil, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member all summary")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	createEntryAPI(t, admin, adminCSRF, "/api/v1/spendings", map[string]any{
 		"amount": "5", "currency_code": "GBP", "entry_date": "2026-10-15",
@@ -238,19 +238,19 @@ func TestSummaryAPI(t *testing.T) {
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?household_id="+homeID.String()+"&scope=all&from=2026-10-01&to=2026-10-31", nil, "")
 	assert.Equal(t, http.StatusOK, response.StatusCode, "explicit household summary")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all", nil, "")
 	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "missing summary dates")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=team&from=2026-10-01&to=2026-10-31", nil, "")
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "invalid summary scope")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	noHousehold := newTestClientWithPool(t, pool)
 	noHousehold.registerHTML(t, "no-household@example.com")
 	response = noHousehold.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?from=2026-10-01&to=2026-10-31", nil, "")
 	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "summary without household")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }

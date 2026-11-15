@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -85,13 +86,21 @@ func printStatus(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	return writeStatus(os.Stdout, migrations, applied)
+}
+
+// writeStatus renders the migration status table and reports the first write
+// or flush error, so a truncated report never looks like a successful one.
+func writeStatus(out io.Writer, migrations []store.Migration, applied []store.AppliedMigration) error {
 	appliedByVersion := make(map[int64]store.AppliedMigration, len(applied))
 	for _, migration := range applied {
 		appliedByVersion[migration.Version] = migration
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "VERSION\tNAME\tSTATUS\tAPPLIED AT")
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(w, "VERSION\tNAME\tSTATUS\tAPPLIED AT"); err != nil {
+		return fmt.Errorf("write status header: %w", err)
+	}
 
 	known := make(map[int64]bool, len(migrations))
 	for _, migration := range migrations {
@@ -105,15 +114,22 @@ func printStatus(ctx context.Context, pool *pgxpool.Pool) error {
 				status = "modified"
 			}
 		}
-		fmt.Fprintf(w, "%04d\t%s\t%s\t%s\n", migration.Version, migration.Name, status, appliedAt)
+		if _, err := fmt.Fprintf(w, "%04d\t%s\t%s\t%s\n", migration.Version, migration.Name, status, appliedAt); err != nil {
+			return fmt.Errorf("write status row: %w", err)
+		}
 	}
 
 	for _, record := range applied {
 		if !known[record.Version] {
-			fmt.Fprintf(w, "%04d\t%s\tmissing\t%s\n",
-				record.Version, record.Name, record.AppliedAt.UTC().Format(time.RFC3339))
+			if _, err := fmt.Fprintf(w, "%04d\t%s\tmissing\t%s\n",
+				record.Version, record.Name, record.AppliedAt.UTC().Format(time.RFC3339)); err != nil {
+				return fmt.Errorf("write status row: %w", err)
+			}
 		}
 	}
 
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("flush status table: %w", err)
+	}
+	return nil
 }

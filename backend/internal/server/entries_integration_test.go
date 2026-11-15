@@ -156,7 +156,7 @@ func TestEntryAPIContractsAndAuthorization(t *testing.T) {
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/incomes?scope=all", nil, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member all list")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/incomes?scope=mine", nil, "")
 	var memberMine entriesEnvelope
@@ -178,23 +178,23 @@ func TestEntryAPIContractsAndAuthorization(t *testing.T) {
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/incomes/"+memberEntryID, nil, "")
 	assert.Equal(t, http.StatusOK, response.StatusCode, "admin get member entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = outsider.apiRequest(t, http.MethodGet, "/api/v1/incomes/"+adminEntryID, nil, "")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider get entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/incomes/"+adminEntryID, nil, "")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "member get other entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodPatch, "/api/v1/incomes/"+memberEntryID, map[string]any{"amount": "99"}, adminCSRF)
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "admin patch member entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodPatch, "/api/v1/incomes/"+adminEntryID, map[string]any{"amount": "99"}, memberCSRF)
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "member patch other entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodPatch, "/api/v1/incomes/"+memberEntryID, map[string]any{"amount": "25.50"}, memberCSRF)
 	if !assert.Equal(t, http.StatusOK, response.StatusCode, "member patch own entry") {
@@ -206,19 +206,19 @@ func TestEntryAPIContractsAndAuthorization(t *testing.T) {
 
 	response = admin.apiRequest(t, http.MethodPatch, "/api/v1/incomes/"+sharedEntryID, map[string]any{"quantity": 1}, adminCSRF)
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "unknown patch field")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/incomes/"+memberEntryID, nil, adminCSRF)
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "admin delete member entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodDelete, "/api/v1/incomes/"+memberEntryID, nil, memberCSRF)
 	assert.Equal(t, http.StatusNoContent, response.StatusCode, "member delete own entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/incomes/"+sharedEntryID, nil, adminCSRF)
 	assert.Equal(t, http.StatusNoContent, response.StatusCode, "admin delete shared entry")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }
 
 func TestEntryAPIValidationAndCSRF(t *testing.T) {
@@ -237,7 +237,7 @@ func TestEntryAPIValidationAndCSRF(t *testing.T) {
 		"amount": "10", "entry_date": "not-a-date",
 	}, csrf)
 	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid date")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/incomes", map[string]any{
 		"amount": "10", "currency_code": "XXX",
@@ -249,15 +249,15 @@ func TestEntryAPIValidationAndCSRF(t *testing.T) {
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/incomes", map[string]any{"amount": "10"}, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "missing CSRF")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/incomes?scope=team", nil, "")
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "invalid scope")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodGet, "/api/v1/incomes?page=abc", nil, "")
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "invalid page")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 }
 
@@ -274,5 +274,5 @@ func TestEntryAPIRequiresActiveHousehold(t *testing.T) {
 
 	response = client.apiRequest(t, http.MethodPost, "/api/v1/spendings", map[string]any{"amount": "1"}, csrf)
 	assert.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "create without household")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }

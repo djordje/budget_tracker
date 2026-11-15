@@ -231,7 +231,9 @@ func TestStatic(t *testing.T) {
 
 	response, err := http.Get(server.URL + "/static/favicon.svg")
 	require.NoError(t, err, "GET static asset")
-	defer response.Body.Close()
+	defer func() {
+		assert.NoError(t, response.Body.Close(), "close response body")
+	}()
 
 	assert.Equal(t, http.StatusOK, response.StatusCode)
 	assert.Contains(t, response.Header.Get("Content-Type"), "image/svg+xml", "Content-Type")
@@ -248,7 +250,9 @@ func TestStaticDoesNotListDirectories(t *testing.T) {
 
 	response, err := http.Get(server.URL + "/static/")
 	require.NoError(t, err, "GET static directory")
-	defer response.Body.Close()
+	defer func() {
+		assert.NoError(t, response.Body.Close(), "close response body")
+	}()
 
 	assert.Equal(t, http.StatusNotFound, response.StatusCode)
 }
@@ -296,7 +300,9 @@ func TestStaticRejectsDotfilesAndDirectories(t *testing.T) {
 		t.Run(tt.path, func(t *testing.T) {
 			response, err := http.Get(server.URL + tt.path)
 			require.NoError(t, err, "GET %s", tt.path)
-			defer response.Body.Close()
+			defer func() {
+				assert.NoError(t, response.Body.Close(), "close response body")
+			}()
 			assert.Equal(t, tt.wantStatus, response.StatusCode)
 		})
 	}
@@ -321,7 +327,9 @@ func TestStaticUsesConfiguredDirectory(t *testing.T) {
 
 	response, err := http.Get(server.URL + "/static/custom.txt")
 	require.NoError(t, err, "GET configured static asset")
-	defer response.Body.Close()
+	defer func() {
+		assert.NoError(t, response.Body.Close(), "close response body")
+	}()
 
 	body, err := io.ReadAll(response.Body)
 	require.NoError(t, err, "read configured static asset")

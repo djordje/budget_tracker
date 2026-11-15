@@ -69,7 +69,7 @@ func (c *testClient) csrfToken(t *testing.T, path string) string {
 	t.Helper()
 	response, err := c.follow.Get(c.baseURL + path)
 	require.NoError(t, err, "GET %s", path)
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	baseURL, err := url.Parse(c.baseURL)
 	require.NoError(t, err, "parse server URL")
@@ -106,7 +106,9 @@ func (c *testClient) postForm(t *testing.T, path string, values url.Values) *htt
 
 func readBody(t *testing.T, response *http.Response) string {
 	t.Helper()
-	defer response.Body.Close()
+	defer func() {
+		assert.NoError(t, response.Body.Close(), "close response body")
+	}()
 	body, err := io.ReadAll(response.Body)
 	require.NoError(t, err, "read response body")
 	return string(body)
@@ -128,7 +130,7 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 
 	response, err := client.noRedirect.Get(client.baseURL + "/app")
 	require.NoError(t, err, "GET /app")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusSeeOther, response.StatusCode)
 	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 
@@ -149,7 +151,7 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 
 	response, err = client.noRedirect.Get(client.baseURL + "/app")
 	require.NoError(t, err, "GET /app after logout")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusSeeOther, response.StatusCode, "GET /app after logout")
 	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 
@@ -218,7 +220,7 @@ func TestAuthenticatedVisitorsAreRedirectedFromAuthPages(t *testing.T) {
 
 	response, err := client.noRedirect.Get(client.baseURL + "/login")
 	require.NoError(t, err, "GET /login")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "GET /login")
 	assert.Equal(t, "/app", response.Header.Get("Location"), "Location")
 }

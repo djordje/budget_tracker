@@ -85,7 +85,7 @@ func TestOptionsAPI(t *testing.T) {
 		"default_display_currency_code":  "RSD",
 	}, memberCSRFValue)
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member update household options")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = outsider.apiRequest(t, http.MethodPut, "/api/v1/households/"+homeID.String()+"/options", map[string]any{
 		"default_income_currency_code":   "RSD",
@@ -93,7 +93,7 @@ func TestOptionsAPI(t *testing.T) {
 		"default_display_currency_code":  "RSD",
 	}, outsiderCSRFValue)
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider update household options")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/my-options", nil, "")
 	var inherited myOptionsEnvelope
@@ -156,13 +156,13 @@ func TestInvitationAPI(t *testing.T) {
 
 	response = member.apiRequest(t, http.MethodGet, "/api/v1/households/"+homeID.String()+"/invitations", nil, "")
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member list invitations")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
 		"email": "new@example.com", "role": "member",
 	}, adminCSRF)
 	assert.Equal(t, http.StatusConflict, response.StatusCode, "duplicate invitation")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	response = admin.apiRequest(t, http.MethodPost, "/api/v1/households/"+homeID.String()+"/invitations", map[string]any{
 		"email": "member@example.com", "role": "member",
@@ -176,10 +176,10 @@ func TestInvitationAPI(t *testing.T) {
 		"email": "another@example.com", "role": "member",
 	}, outsiderCSRFValue)
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "outsider invite")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 
 	invitationID := created.Invitation.ID
 	response = admin.apiRequest(t, http.MethodDelete, "/api/v1/households/"+homeID.String()+"/invitations/"+invitationID, nil, adminCSRF)
 	assert.Equal(t, http.StatusNoContent, response.StatusCode, "revoke invitation")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 }

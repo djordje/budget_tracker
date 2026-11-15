@@ -126,7 +126,7 @@ func TestReportsHTMLFlow(t *testing.T) {
 
 	response, err = admin.follow.Get(admin.baseURL + "/app/reports?from=bad&to=2026-10-31")
 	require.NoError(t, err, "GET invalid report")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode, "invalid report date")
 
 	// Members cannot widen scope through the query string.

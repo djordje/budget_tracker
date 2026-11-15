@@ -76,7 +76,7 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 
 	response, err = grace.follow.Get(grace.baseURL + settingsPath)
 	require.NoError(t, err, "grace GET settings")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusNotFound, response.StatusCode, "non-member settings")
 
 	graceID := userIDByEmail(t, client.pool, "grace@example.com")
@@ -118,7 +118,7 @@ func TestHouseholdHTMLRequiresAuth(t *testing.T) {
 	client := newTestClient(t)
 	response, err := client.noRedirect.Get(client.baseURL + "/app/households/new")
 	require.NoError(t, err, "GET new household")
-	response.Body.Close()
+	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "GET new household")
 	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
 }
