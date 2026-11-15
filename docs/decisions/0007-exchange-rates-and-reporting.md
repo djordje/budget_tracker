@@ -30,6 +30,9 @@ explainable to users.
 - When a rate is missing, do not treat the entry as zero or omit it silently.
   Exclude it from converted totals, mark the report incomplete, and list the
   missing currency pair and entry date.
+- A conversion or total that overflows `int64` aborts the report with an error
+  instead of a partial summary. An unrepresentable amount is wrong, not merely
+  missing a rate.
 - “Mine” excludes household-wide entries. “All” includes every personal entry
   and household-wide entry and remains admin-only.
 - Any household member may maintain household exchange rates. Rate IDs are

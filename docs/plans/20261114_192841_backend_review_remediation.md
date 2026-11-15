@@ -295,7 +295,7 @@ Resolved 2026-11-15 before implementation, adopting the proposal recorded in eac
 | --- | --- |
 | Q1 — Registration throttling | Adopt the proposed policy: 5 attempts per 15 minutes keyed by IP plus normalized email, mirroring the login limiter. No CAPTCHA-style gate in this plan. |
 | Q2 — Email enumeration at registration | Keep the explicit "account already exists" validation message and rely on throttling (Milestone 1, commit 3). The generic-response alternative is not taken. |
-| Q3 — Report overflow behavior | Keep the explicit conversion-overflow error that aborts the report, and document it. Marking the summary incomplete is not taken. |
+| Q3 — Report overflow behavior | Keep the explicit conversion-overflow error that aborts the report, and document it. Marking the summary incomplete is not taken. Documented in `reporting.Summary`, at the conversion in `reporting.Service.Summary`, and in decision record 0007. |
 | Q4 — Rate input notation | Reject scientific notation in `canonicalRate` to match the form copy, and keep exactly-representable values with up to 8 decimal places (extra trailing zeros canonicalize away). Table-driven tests own the scale boundary and the Milestone 0 validation-message representation. |
 | Q5 — Membership FK delete behavior | `ON DELETE CASCADE`, documented in the migration comment, matching the current `users` cascade. No member-removal feature exists yet. |
 | Q6 — CSRF hardening | The single-host, no-sibling-subdomain assumption still holds, so S6 stays documentation-only. Revisit if deployment changes. |

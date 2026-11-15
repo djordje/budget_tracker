@@ -36,7 +36,9 @@ type MissingRate struct {
 
 // Summary is a converted household total. Totals include only entries that
 // could be converted; Complete is false and MissingRates is populated when
-// any entry was skipped.
+// any entry was skipped. A conversion or total that overflows int64 is not an
+// incompleteness: the service returns an error and no summary, because the
+// value cannot be represented at all.
 type Summary struct {
 	From               string
 	To                 string
@@ -168,6 +170,9 @@ func (s *Service) Summary(ctx context.Context, params SummaryParams) (Summary, e
 			}
 			converted, err = ConvertMinor(entry.AmountMinor, entry.CurrencyMinorUnits, display.MinorUnits, rate)
 			if err != nil {
+				// Overflow is not a missing rate: an unrepresentable total aborts the
+				// report instead of being reported as incomplete, because it would be
+				// wrong rather than partial.
 				return Summary{}, fmt.Errorf("convert %s entry %d: %w", entry.Kind, entry.ID, err)
 			}
 		}
