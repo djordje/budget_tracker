@@ -485,8 +485,12 @@ func TestSafeNextPath(t *testing.T) {
 // because the parser escapes the backslash rather than treating it as a host.
 func TestSafeNextPathKeepsRedirectsOnThisOrigin(t *testing.T) {
 	fallback := "/app"
-	tests := []struct{ name, raw string }{
-		{name: "backslash authority", raw: `/\evil.example`},
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "backslash authority", raw: `/\evil.example`, want: "/%5Cevil.example"},
 		{name: "encoded slashes", raw: "/%2f%2fevil.example"},
 		{name: "protocol relative", raw: "//evil.example"},
 		{name: "absolute https URL", raw: "https://evil.example/path"},
@@ -501,6 +505,10 @@ func TestSafeNextPathKeepsRedirectsOnThisOrigin(t *testing.T) {
 			require.NotEmpty(t, got, "safeNextPath(%q)", tt.raw)
 			assert.True(t, strings.HasPrefix(got, "/"), "safeNextPath(%q) = %q", tt.raw, got)
 			assert.False(t, strings.HasPrefix(got, "//"), "safeNextPath(%q) = %q", tt.raw, got)
+			assert.NotContains(t, got, `\`, "safeNextPath(%q) = %q kept a raw backslash", tt.raw, got)
+			if tt.want != "" {
+				assert.Equal(t, tt.want, got, "safeNextPath(%q)", tt.raw)
+			}
 			parsed, err := url.Parse(got)
 			require.NoError(t, err, "safeNextPath(%q) = %q", tt.raw, got)
 			assert.False(t, parsed.IsAbs(), "safeNextPath(%q) = %q", tt.raw, got)
