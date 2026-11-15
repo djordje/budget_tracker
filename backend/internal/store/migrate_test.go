@@ -1,9 +1,11 @@
 package store
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadMigrationsSortsByVersion(t *testing.T) {
@@ -13,24 +15,18 @@ func TestLoadMigrationsSortsByVersion(t *testing.T) {
 	}
 
 	migrations, err := LoadMigrations(fsys, "migrations")
-	if err != nil {
-		t.Fatalf("LoadMigrations() error = %v", err)
-	}
-	if len(migrations) != 2 {
-		t.Fatalf("got %d migrations, want 2", len(migrations))
-	}
-	if migrations[0].Version != 1 || migrations[0].Name != "create_things" {
-		t.Errorf("first migration = %+v", migrations[0])
-	}
-	if migrations[1].Version != 2 || migrations[1].Name != "add_name" {
-		t.Errorf("second migration = %+v", migrations[1])
-	}
-	if migrations[0].Checksum == "" || migrations[0].Checksum == migrations[1].Checksum {
-		t.Errorf("checksums = %q, %q", migrations[0].Checksum, migrations[1].Checksum)
-	}
-	if got := migrations[0].Label(); got != "0001_create_things" {
-		t.Errorf("Label() = %q", got)
-	}
+	require.NoError(t, err, "LoadMigrations()")
+	require.Len(t, migrations, 2)
+
+	assert.Equal(t, int64(1), migrations[0].Version, "first migration = %+v", migrations[0])
+	assert.Equal(t, "create_things", migrations[0].Name, "first migration = %+v", migrations[0])
+	assert.Equal(t, int64(2), migrations[1].Version, "second migration = %+v", migrations[1])
+	assert.Equal(t, "add_name", migrations[1].Name, "second migration = %+v", migrations[1])
+
+	assert.NotEmpty(t, migrations[0].Checksum, "checksums = %q, %q", migrations[0].Checksum, migrations[1].Checksum)
+	assert.NotEqual(t, migrations[1].Checksum, migrations[0].Checksum, "checksums = %q, %q", migrations[0].Checksum, migrations[1].Checksum)
+
+	assert.Equal(t, "0001_create_things", migrations[0].Label(), "Label()")
 }
 
 func TestLoadMigrationsRejectsInvalidFilename(t *testing.T) {
@@ -38,9 +34,8 @@ func TestLoadMigrationsRejectsInvalidFilename(t *testing.T) {
 		"migrations/1_short_version.sql": {Data: []byte("SELECT 1;")},
 	}
 
-	if _, err := LoadMigrations(fsys, "migrations"); err == nil {
-		t.Fatal("LoadMigrations() error = nil, want error")
-	}
+	_, err := LoadMigrations(fsys, "migrations")
+	assert.Error(t, err, "LoadMigrations() with a short version prefix")
 }
 
 func TestLoadMigrationsRejectsDuplicateVersion(t *testing.T) {
@@ -50,12 +45,8 @@ func TestLoadMigrationsRejectsDuplicateVersion(t *testing.T) {
 	}
 
 	_, err := LoadMigrations(fsys, "migrations")
-	if err == nil {
-		t.Fatal("LoadMigrations() error = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "duplicate") {
-		t.Errorf("error = %v, want duplicate version error", err)
-	}
+	require.Error(t, err, "LoadMigrations() with duplicate versions")
+	assert.ErrorContains(t, err, "duplicate")
 }
 
 func TestLoadMigrationsIgnoresNonSQLFiles(t *testing.T) {
@@ -64,10 +55,6 @@ func TestLoadMigrationsIgnoresNonSQLFiles(t *testing.T) {
 	}
 
 	migrations, err := LoadMigrations(fsys, "migrations")
-	if err != nil {
-		t.Fatalf("LoadMigrations() error = %v", err)
-	}
-	if len(migrations) != 0 {
-		t.Errorf("got %d migrations, want 0", len(migrations))
-	}
+	require.NoError(t, err, "LoadMigrations()")
+	assert.Empty(t, migrations)
 }

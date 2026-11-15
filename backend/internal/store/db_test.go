@@ -3,17 +3,18 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOpenRejectsInvalidURL(t *testing.T) {
 	ctx := context.Background()
 
-	if _, err := Open(ctx, ""); err == nil {
-		t.Fatal("Open() error = nil, want error")
-	}
-	if _, err := Open(ctx, "not a database URL"); err == nil {
-		t.Fatal("Open() error = nil, want error")
-	}
+	_, err := Open(ctx, "")
+	assert.Error(t, err, `Open("")`)
+
+	_, err = Open(ctx, "not a database URL")
+	assert.Error(t, err, `Open("not a database URL")`)
 }
 
 func TestOpenHonorsCanceledContext(t *testing.T) {
@@ -24,7 +25,6 @@ func TestOpenHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := Open(ctx, "postgres://budget@127.0.0.1:1/budget_tracker?sslmode=disable"); err == nil {
-		t.Fatal("Open() error = nil, want error")
-	}
+	_, err := Open(ctx, "postgres://budget@127.0.0.1:1/budget_tracker?sslmode=disable")
+	assert.Error(t, err, "Open() with a canceled context")
 }
