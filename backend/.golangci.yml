@@ -1,0 +1,12 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - testifylint
+  settings:
+    testifylint:
+      # Decision 5 keeps independent expected-error checks nonfatal, which this
+      # checker would reject by demanding require for every error assertion.
+      disable:
+        - require-error

@@ -3,6 +3,9 @@ package config
 import (
 	"log/slog"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func clearEnvironment(t *testing.T) {
@@ -17,24 +20,13 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/example")
 
 	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Env != "development" {
-		t.Errorf("Env = %q, want development", cfg.Env)
-	}
-	if cfg.HTTPAddr != defaultHTTPAddr {
-		t.Errorf("HTTPAddr = %q, want %q", cfg.HTTPAddr, defaultHTTPAddr)
-	}
-	if cfg.DatabaseURL != "postgres://localhost/example" {
-		t.Errorf("DatabaseURL = %q, want postgres://localhost/example", cfg.DatabaseURL)
-	}
-	if cfg.LogLevel != slog.LevelInfo {
-		t.Errorf("LogLevel = %v, want %v", cfg.LogLevel, slog.LevelInfo)
-	}
-	if cfg.StaticDir != "" {
-		t.Errorf("StaticDir = %q, want empty", cfg.StaticDir)
-	}
+	require.NoError(t, err, "Load()")
+
+	assert.Equal(t, "development", cfg.Env)
+	assert.Equal(t, defaultHTTPAddr, cfg.HTTPAddr)
+	assert.Equal(t, "postgres://localhost/example", cfg.DatabaseURL)
+	assert.Equal(t, slog.LevelInfo, cfg.LogLevel)
+	assert.Empty(t, cfg.StaticDir)
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -46,32 +38,20 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("WEB_STATIC_DIR", "web/static")
 
 	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Env != "production" {
-		t.Errorf("Env = %q, want production", cfg.Env)
-	}
-	if cfg.HTTPAddr != ":9090" {
-		t.Errorf("HTTPAddr = %q, want :9090", cfg.HTTPAddr)
-	}
-	if cfg.DatabaseURL != "postgres://example/db" {
-		t.Errorf("DatabaseURL = %q, want postgres://example/db", cfg.DatabaseURL)
-	}
-	if cfg.LogLevel != slog.LevelDebug {
-		t.Errorf("LogLevel = %v, want %v", cfg.LogLevel, slog.LevelDebug)
-	}
-	if cfg.StaticDir != "web/static" {
-		t.Errorf("StaticDir = %q, want web/static", cfg.StaticDir)
-	}
+	require.NoError(t, err, "Load()")
+
+	assert.Equal(t, "production", cfg.Env)
+	assert.Equal(t, ":9090", cfg.HTTPAddr)
+	assert.Equal(t, "postgres://example/db", cfg.DatabaseURL)
+	assert.Equal(t, slog.LevelDebug, cfg.LogLevel)
+	assert.Equal(t, "web/static", cfg.StaticDir)
 }
 
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	clearEnvironment(t)
 
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want error")
-	}
+	_, err := Load()
+	assert.Error(t, err, "Load() with no DATABASE_URL")
 }
 
 func TestLoadRejectsInvalidEnvironment(t *testing.T) {
@@ -79,9 +59,8 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 	t.Setenv("APP_ENV", "staging")
 	t.Setenv("DATABASE_URL", "postgres://example/db")
 
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want error")
-	}
+	_, err := Load()
+	assert.Error(t, err, "Load() with APP_ENV=staging")
 }
 
 func TestLoadRejectsInvalidLogLevel(t *testing.T) {
@@ -89,7 +68,6 @@ func TestLoadRejectsInvalidLogLevel(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://example/db")
 	t.Setenv("LOG_LEVEL", "loud")
 
-	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want error")
-	}
+	_, err := Load()
+	assert.Error(t, err, "Load() with LOG_LEVEL=loud")
 }

@@ -66,6 +66,10 @@ When asked to prepare or create a commit, follow `.agents/skills/commit-message/
 
 ## Documentation and testing
 
+- Use `github.com/stretchr/testify` (`assert`, `require`) for assertions in `backend` tests instead of hand-written `if got != want` checks. Pass the expected value first, then the actual value: `require.Equal(t, want, got)`.
+- Use `require` when a failure would make the rest of the test meaningless — setup, JSON decode, a gating status code, or any value that is indexed, dereferenced, or type-asserted afterwards. Use `assert` for independent checks, including expected errors that no later check depends on. Never call `require`, `t.Fatal`, or `t.FailNow` from a worker goroutine: report nonfatally and return.
+- Keep hand-written helpers that encode a protocol, such as request builders and fixtures. Do not add helpers that wrap a single comparison; Testify already provides them.
+- `mise run lint` runs `golangci-lint` with `testifylint` (see `backend/.golangci.yml`). Changing that configuration is a plan-level decision, not a local one: loosening it hides regressions, and widening it surfaces findings that belong to the plan that fixes them.
 - Update the active plan when confirmed product decisions or milestones change. Completed plans in `docs/plans` are read-only historical records: never rewrite their delivered milestones, acceptance criteria, or validation status. Record new findings in the active plan or a new plan that links back. Follow `docs/plans/README.md` for status and lifecycle rules.
 - Document local setup and development tasks as they are introduced; keep commands in documentation synchronized with `mise.toml`.
 - Test money arithmetic, rate precedence, inverse conversion, rounding, date boundaries, and missing-rate handling with table-driven tests.

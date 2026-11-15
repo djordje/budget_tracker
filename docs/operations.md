@@ -39,6 +39,25 @@ Migrations are numbered SQL files in `backend/db/migrations`. Applied versions
 and checksums are tracked in `schema_migrations`; never edit an applied
 migration.
 
+## Test conventions
+
+The rules live in `AGENTS.md` ("Documentation and testing"): Testify
+`assert`/`require`, expected value before actual value, `require` for
+prerequisites and `assert` for independent checks, and no assertion helpers that
+wrap a single comparison. `mise run lint` enforces them with `testifylint`
+configured in `backend/.golangci.yml`.
+
+```sh
+mise run test                # unit tests, no database
+mise run test:integration    # requires Compose PostgreSQL (mise run db:up)
+cd backend && golangci-lint run ./...
+cd backend && golangci-lint run --build-tags=integration ./...
+```
+
+Integration-tagged files are linted only by the second invocation, so run both.
+The one rule `testifylint` cannot check is the ban on `require` inside worker
+goroutines; report those nonfatally and return instead.
+
 ## Security controls
 
 - Argon2id password hashes; normalized unique emails; generic login failures.

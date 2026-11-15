@@ -1,5 +1,6 @@
 [tools]
 go = "1.27.3"
+golangci-lint = "2.15.0"
 node = "24.14.0"
 
 [env]
@@ -62,7 +63,12 @@ fi
 
 [tasks.lint]
 description = "Run static analysis"
-run = "cd backend && go vet ./... && go vet -tags=integration ./..."
+run = [
+  "cd backend && go vet ./...",
+  "cd backend && go vet -tags=integration ./...",
+  "cd backend && golangci-lint run ./...",
+  "cd backend && golangci-lint run --build-tags=integration ./...",
+]
 
 [tasks.test]
 description = "Run unit tests"
