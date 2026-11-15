@@ -4,9 +4,11 @@ package auth_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"budgettracker/internal/auth"
 	"budgettracker/internal/households"
@@ -25,35 +27,20 @@ func TestSetActiveHousehold(t *testing.T) {
 		Email:     "ada@example.com",
 		Password:  "correct horse battery staple",
 	})
-	if err != nil {
-		t.Fatalf("Register() error = %v", err)
-	}
+	require.NoError(t, err, "Register() error")
 	home, err := householdService.CreateAndActivate(ctx, session.User.ID, session.TokenHash, "Home")
-	if err != nil {
-		t.Fatalf("CreateAndActivate household: %v", err)
-	}
+	require.NoError(t, err, "CreateAndActivate household")
 
-	if err := service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, nil); err != nil {
-		t.Fatalf("SetActiveHousehold(nil) error = %v", err)
-	}
+	require.NoError(t, service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, nil), "SetActiveHousehold(nil)")
 	reloaded, err := service.SessionByToken(ctx, session.Token)
-	if err != nil {
-		t.Fatalf("SessionByToken() error = %v", err)
-	}
-	if reloaded.ActiveHouseholdID != nil {
-		t.Errorf("active household = %v, want nil", reloaded.ActiveHouseholdID)
-	}
+	require.NoError(t, err, "SessionByToken() error")
+	assert.Nil(t, reloaded.ActiveHouseholdID, "active household")
 
-	if err := service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, &home.ID); err != nil {
-		t.Fatalf("SetActiveHousehold() error = %v", err)
-	}
+	require.NoError(t, service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, &home.ID), "SetActiveHousehold()")
 	reloaded, err = service.SessionByToken(ctx, session.Token)
-	if err != nil {
-		t.Fatalf("SessionByToken() error = %v", err)
-	}
-	if reloaded.ActiveHouseholdID == nil || *reloaded.ActiveHouseholdID != home.ID {
-		t.Errorf("active household = %v, want %v", reloaded.ActiveHouseholdID, home.ID)
-	}
+	require.NoError(t, err, "SessionByToken() error")
+	require.NotNil(t, reloaded.ActiveHouseholdID, "active household")
+	assert.Equal(t, home.ID, *reloaded.ActiveHouseholdID, "active household")
 
 	otherSession, err := service.Register(ctx, auth.RegisterParams{
 		FirstName: "Grace",
@@ -61,18 +48,13 @@ func TestSetActiveHousehold(t *testing.T) {
 		Email:     "grace@example.com",
 		Password:  "correct horse battery staple",
 	})
-	if err != nil {
-		t.Fatalf("Register other user: %v", err)
-	}
+	require.NoError(t, err, "Register other user")
 	otherHome, err := householdService.CreateAndActivate(ctx, otherSession.User.ID, otherSession.TokenHash, "Other home")
-	if err != nil {
-		t.Fatalf("CreateAndActivate other household: %v", err)
-	}
+	require.NoError(t, err, "CreateAndActivate other household")
 
-	if err := service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, &otherHome.ID); !errors.Is(err, auth.ErrHouseholdAccess) {
-		t.Errorf("SetActiveHousehold() other household error = %v, want ErrHouseholdAccess", err)
-	}
-	if err := service.SetActiveHousehold(ctx, strings.Repeat("ab", 32), session.User.ID, &home.ID); !errors.Is(err, auth.ErrSessionNotFound) {
-		t.Errorf("SetActiveHousehold() missing session error = %v, want ErrSessionNotFound", err)
-	}
+	err = service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, &otherHome.ID)
+	assert.ErrorIs(t, err, auth.ErrHouseholdAccess, "SetActiveHousehold() other household")
+
+	err = service.SetActiveHousehold(ctx, strings.Repeat("ab", 32), session.User.ID, &home.ID)
+	assert.ErrorIs(t, err, auth.ErrSessionNotFound, "SetActiveHousehold() missing session")
 }
