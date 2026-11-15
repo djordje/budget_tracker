@@ -1,9 +1,11 @@
 package finance
 
 import (
-	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseAmount(t *testing.T) {
@@ -40,20 +42,11 @@ func TestParseAmount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseAmount(tt.raw, tt.minorUnits)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("ParseAmount(%q) = %d, want error", tt.raw, got)
-				}
-				if !errors.Is(err, ErrInvalidAmount) {
-					t.Errorf("error = %v, want ErrInvalidAmount", err)
-				}
+				require.ErrorIs(t, err, ErrInvalidAmount, "ParseAmount(%q) = %d", tt.raw, got)
 				return
 			}
-			if err != nil {
-				t.Fatalf("ParseAmount(%q) error = %v", tt.raw, err)
-			}
-			if got != tt.want {
-				t.Errorf("ParseAmount(%q) = %d, want %d", tt.raw, got, tt.want)
-			}
+			require.NoError(t, err, "ParseAmount(%q)", tt.raw)
+			assert.Equal(t, tt.want, got, "ParseAmount(%q)", tt.raw)
 		})
 	}
 }
@@ -74,9 +67,7 @@ func TestFormatAmount(t *testing.T) {
 		{minor: 1234, minorUnits: 3, want: "1.234"},
 	}
 	for _, tt := range tests {
-		if got := FormatAmount(tt.minor, tt.minorUnits); got != tt.want {
-			t.Errorf("FormatAmount(%d, %d) = %q, want %q", tt.minor, tt.minorUnits, got, tt.want)
-		}
+		assert.Equal(t, tt.want, FormatAmount(tt.minor, tt.minorUnits), "FormatAmount(%d, %d)", tt.minor, tt.minorUnits)
 	}
 }
 
@@ -93,8 +84,6 @@ func TestDisplayAmount(t *testing.T) {
 		{minor: -123456, minorUnits: 2, want: "-1,234.56"},
 	}
 	for _, tt := range tests {
-		if got := DisplayAmount(tt.minor, tt.minorUnits); got != tt.want {
-			t.Errorf("DisplayAmount(%d, %d) = %q, want %q", tt.minor, tt.minorUnits, got, tt.want)
-		}
+		assert.Equal(t, tt.want, DisplayAmount(tt.minor, tt.minorUnits), "DisplayAmount(%d, %d)", tt.minor, tt.minorUnits)
 	}
 }
