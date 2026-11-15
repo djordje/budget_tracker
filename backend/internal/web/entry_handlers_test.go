@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
 
@@ -37,9 +39,7 @@ func serveHTMXDelete(t *testing.T, entries EntryService) *httptest.ResponseRecor
 		Rates:      stubRates{},
 		Reports:    stubReports{},
 	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	require.NoError(t, err, "New()")
 
 	userID := uuid.New()
 	session := auth.Session{UserID: userID, User: auth.User{ID: userID}}
@@ -70,25 +70,14 @@ func TestHTMXDeleteFailuresReturnErrorFragments(t *testing.T) {
 			entries := &failingDeleteEntryService{err: tt.err}
 			recorder := serveHTMXDelete(t, entries)
 
-			if !entries.called {
-				t.Fatal("Delete() was not called")
-			}
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			assert.True(t, entries.called, "Delete() was not called")
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			body := recorder.Body.String()
-			if !strings.Contains(body, `id="entries-content"`) {
-				t.Errorf("body is not an entries-content fragment:\n%s", body)
-			}
-			if !strings.Contains(body, tt.wantText) {
-				t.Errorf("body does not contain %q:\n%s", tt.wantText, body)
-			}
-			if strings.Contains(body, "notice=entry_deleted") || strings.Contains(body, "Entry deleted") {
-				t.Errorf("failure fragment advertised a successful deletion:\n%s", body)
-			}
-			if strings.Contains(body, "<html") {
-				t.Error("failure returned a full page instead of a fragment")
-			}
+			assert.Contains(t, body, `id="entries-content"`, "body is not an entries-content fragment")
+			assert.Contains(t, body, tt.wantText)
+			assert.NotContains(t, body, "notice=entry_deleted", "failure fragment advertised a successful deletion")
+			assert.NotContains(t, body, "Entry deleted", "failure fragment advertised a successful deletion")
+			assert.NotContains(t, body, "<html", "failure returned a full page instead of a fragment")
 		})
 	}
 }

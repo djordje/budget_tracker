@@ -5,8 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
 
@@ -40,9 +42,7 @@ func TestReportPageUsesReportSpecificErrors(t *testing.T) {
 				Rates:   stubRates{},
 				Reports: stubReports{},
 			})
-			if err != nil {
-				t.Fatalf("New() error = %v", err)
-			}
+			require.NoError(t, err, "New()")
 
 			session := auth.Session{
 				UserID:            userID,
@@ -55,16 +55,10 @@ func TestReportPageUsesReportSpecificErrors(t *testing.T) {
 			auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
 				Load(http.HandlerFunc(handler.ReportsPage)).ServeHTTP(recorder, request)
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			body := recorder.Body.String()
-			if !strings.Contains(body, tt.wantText) {
-				t.Errorf("body does not contain %q:\n%s", tt.wantText, body)
-			}
-			if strings.Contains(body, "Rate not found") {
-				t.Errorf("report failure used rate-specific copy:\n%s", body)
-			}
+			assert.Contains(t, body, tt.wantText)
+			assert.NotContains(t, body, "Rate not found", "report failure used rate-specific copy:\n%s", body)
 		})
 	}
 }
