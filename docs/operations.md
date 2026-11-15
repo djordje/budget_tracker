@@ -73,9 +73,14 @@ goroutines; report those nonfatally and return instead.
   runs with production cookie settings.
 - Invitation tokens are hashed at rest, expire after seven days, are single
   use, require an email match, and are redacted from request logs.
-- Failed logins are throttled in process at five attempts per IP/email pair per
-  fifteen minutes. Admission atomically reserves capacity, keys are fixed-size
-  hashes, and idle state is pruned with a hard cap and oldest-key eviction.
+- Failed logins and registration attempts are throttled in process at five
+  attempts per IP/email pair per fifteen minutes. Admission atomically reserves
+  capacity, keys are fixed-size hashes, and idle state is pruned. There is no
+  oldest-key eviction: at the 10,000-key hard cap a new key is refused, and one
+  client IP may create at most 50 new buckets per window, so junk keys cannot
+  exhaust the shared cap or reset another client's counter. Registration spends
+  that budget only after the password confirmation check passes and before any
+  password hashing.
 - Sessions use the token hash as the primary key. Expired sessions are removed
   opportunistically after successful registration or login, at most once per
   hour per process, and cleanup failures do not invalidate the new session.
@@ -99,7 +104,8 @@ goroutines; report those nonfatally and return instead.
 - JSON request bodies use `application/json` (or a `+json` structured suffix),
   exactly one top-level object, and a 1 MiB limit. Malformed input is 400,
   oversized input is 413, and unsupported media types are 415 with safe
-  envelopes.
+  envelopes. HTML form bodies share that 1 MiB bound; an oversized form is 413
+  whether its length is declared or streamed as chunked.
 - Household creation and activation commit in one transaction. Personal option
   updates return the committed personal and effective view from the same
   transaction. Report summaries read options, currencies, entries, and rates in

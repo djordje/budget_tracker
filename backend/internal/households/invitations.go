@@ -140,7 +140,8 @@ func (s *Service) CreateInvitation(ctx context.Context, params CreateInvitationP
 	return invitation, rawToken, nil
 }
 
-// ListInvitations lists pending invitations for an admin.
+// ListInvitations lists the unaccepted invitations for an admin. Expired rows
+// stay visible so they can still be revoked.
 func (s *Service) ListInvitations(ctx context.Context, actorID, householdID uuid.UUID) ([]Invitation, error) {
 	if _, err := s.adminRole(ctx, householdID, actorID); err != nil {
 		return nil, err
