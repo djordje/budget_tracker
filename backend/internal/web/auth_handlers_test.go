@@ -56,3 +56,34 @@ func TestLoginRejectsOversizedPasswordWithoutCallingService(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "Email or password is incorrect.")
 	assert.Zero(t, calls, "Login() calls")
 }
+
+func TestRegisterThrottleKeepsTheServiceUncalled(t *testing.T) {
+	var calls int
+	handler := newAuthHandler(t, stubSessions{
+		register: func(context.Context, auth.RegisterParams) (auth.Session, error) {
+			calls++
+			return auth.Session{}, &auth.ValidationError{
+				Fields: map[string]string{"email": "Enter a valid email address."},
+			}
+		},
+	})
+	form := url.Values{
+		"first_name":       {"Ada"},
+		"last_name":        {"Lovelace"},
+		"email":            {"ada@example.com"},
+		"password":         {"correct horse battery staple"},
+		"password_confirm": {"correct horse battery staple"},
+	}
+
+	for i := 0; i < 5; i++ {
+		recorder := postAuthForm(handler.Register, "/register", form)
+		require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "attempt %d, body = %s", i+1, recorder.Body.String())
+	}
+
+	recorder := postAuthForm(handler.Register, "/register", form)
+
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, "900", recorder.Header().Get("Retry-After"), "Retry-After")
+	assert.Contains(t, recorder.Body.String(), "Too many registration attempts")
+	assert.Equal(t, 5, calls, "Register() calls")
+}

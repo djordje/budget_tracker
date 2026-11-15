@@ -26,6 +26,7 @@ type registerPageData struct {
 	Email       string
 	Next        string
 	FieldErrors map[string]string
+	FormError   string
 }
 
 // Home serves the public landing page.
@@ -71,7 +72,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	limiterKey := loginLimitKey(r, email)
+	limiterKey := limitKey(r, email)
 
 	if !h.loginLimiter.TryAcquire(limiterKey) {
 		w.Header().Set("Retry-After", "900")
@@ -130,6 +131,20 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		LastName:  r.FormValue("last_name"),
 		Email:     r.FormValue("email"),
 		Password:  r.FormValue("password"),
+	}
+	// Throttle before any service call so no Argon2 work happens for a refused
+	// registration attempt.
+	if !h.registrationLimiter.TryAcquire(limitKey(r, params.Email)) {
+		w.Header().Set("Retry-After", "900")
+		h.render(w, r, "register", http.StatusTooManyRequests, registerPageData{
+			pageData:  h.basePageData(r, "Create account"),
+			FirstName: params.FirstName,
+			LastName:  params.LastName,
+			Email:     params.Email,
+			Next:      safeNextPath(r.FormValue("next"), ""),
+			FormError: "Too many registration attempts. Try again in 15 minutes.",
+		})
+		return
 	}
 	fieldErrors := make(map[string]string)
 	if params.Password != r.FormValue("password_confirm") {
@@ -222,13 +237,24 @@ func redirectIfAuthenticated(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func loginLimitKey(r *http.Request, email string) string {
+// limitKey identifies a throttle bucket by client IP and email. Emails that
+// normalize are keyed by their canonical form so case and whitespace variants
+// share one budget; other input is keyed by its trimmed, lowercased text.
+func limitKey(r *http.Request, rawEmail string) string {
+	email, err := auth.NormalizeEmail(rawEmail)
+	if err != nil {
+		email = strings.ToLower(strings.TrimSpace(rawEmail))
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(clientHost(r)) + "|" + email))
+	return hex.EncodeToString(sum[:])
+}
+
+func clientHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		host = r.RemoteAddr
+		return r.RemoteAddr
 	}
-	sum := sha256.Sum256([]byte(strings.ToLower(host) + "|" + strings.ToLower(strings.TrimSpace(email))))
-	return hex.EncodeToString(sum[:])
+	return host
 }
 
 func safeNextPath(raw, fallback string) string {

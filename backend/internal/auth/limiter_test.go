@@ -9,9 +9,21 @@ import (
 	"time"
 )
 
-func TestLoginLimiterReservesAtomicallyAndExpires(t *testing.T) {
+func TestRegistrationLimiterAllowsFiveAttemptsPerWindow(t *testing.T) {
+	limiter := NewRegistrationLimiter()
+	assert.Equal(t, 5, limiter.max, "registration attempt limit")
+	assert.Equal(t, 15*time.Minute, limiter.window, "registration attempt window")
+
+	const key = "client|email"
+	for i := 0; i < 5; i++ {
+		assert.True(t, limiter.TryAcquire(key), "attempt %d", i+1)
+	}
+	assert.False(t, limiter.TryAcquire(key), "sixth attempt")
+}
+
+func TestAttemptLimiterReservesAtomicallyAndExpires(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
-	limiter := newLoginLimiter(2, time.Minute, func() time.Time { return now })
+	limiter := newAttemptLimiter(2, time.Minute, func() time.Time { return now })
 	const key = "hashed-key"
 
 	assert.True(t, limiter.TryAcquire(key), "first fresh attempt")
@@ -25,9 +37,9 @@ func TestLoginLimiterReservesAtomicallyAndExpires(t *testing.T) {
 	assert.True(t, limiter.TryAcquire(key), "reset did not clear attempts")
 }
 
-func TestLoginLimiterConcurrentAdmissions(t *testing.T) {
+func TestAttemptLimiterConcurrentAdmissions(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
-	limiter := newLoginLimiter(5, 15*time.Minute, func() time.Time { return now })
+	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
 
 	var admitted atomic.Int32
 	var wg sync.WaitGroup
@@ -45,9 +57,9 @@ func TestLoginLimiterConcurrentAdmissions(t *testing.T) {
 	assert.Equal(t, int32(5), admitted.Load(), "admitted attempts")
 }
 
-func TestLoginLimiterMaintainsBoundsAndEvictsOldest(t *testing.T) {
+func TestAttemptLimiterMaintainsBoundsAndEvictsOldest(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
-	limiter := newLoginLimiter(5, 15*time.Minute, func() time.Time { return now })
+	limiter := newAttemptLimiter(5, 15*time.Minute, func() time.Time { return now })
 	limiter.maxKeys = 2
 	limiter.maintenanceInterval = 0
 

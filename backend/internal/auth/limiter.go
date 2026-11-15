@@ -8,12 +8,17 @@ import (
 const (
 	limiterMaxKeys             = 10_000
 	limiterMaintenanceInterval = time.Minute
+
+	// attemptLimit and attemptWindow are the shared sign-in and registration
+	// throttle policy: five attempts per fifteen minutes.
+	attemptLimit  = 5
+	attemptWindow = 15 * time.Minute
 )
 
-// LoginLimiter is a small in-process failed-login throttle. It is sufficient
-// for the single-instance MVP; multi-instance deployments should replace it
-// with a shared limiter.
-type LoginLimiter struct {
+// AttemptLimiter is a small in-process throttle for authentication attempts. It
+// is sufficient for the single-instance MVP; multi-instance deployments should
+// replace it with a shared limiter.
+type AttemptLimiter struct {
 	mu                  sync.Mutex
 	attempts            map[string][]time.Time
 	max                 int
@@ -24,13 +29,18 @@ type LoginLimiter struct {
 	lastMaintenance     time.Time
 }
 
-// NewLoginLimiter allows five failed attempts per fifteen minutes.
-func NewLoginLimiter() *LoginLimiter {
-	return newLoginLimiter(5, 15*time.Minute, time.Now)
+// NewLoginLimiter allows five sign-in attempts per fifteen minutes.
+func NewLoginLimiter() *AttemptLimiter {
+	return newAttemptLimiter(attemptLimit, attemptWindow, time.Now)
 }
 
-func newLoginLimiter(max int, window time.Duration, now func() time.Time) *LoginLimiter {
-	return &LoginLimiter{
+// NewRegistrationLimiter allows five registration attempts per fifteen minutes.
+func NewRegistrationLimiter() *AttemptLimiter {
+	return newAttemptLimiter(attemptLimit, attemptWindow, time.Now)
+}
+
+func newAttemptLimiter(max int, window time.Duration, now func() time.Time) *AttemptLimiter {
+	return &AttemptLimiter{
 		attempts:            make(map[string][]time.Time),
 		max:                 max,
 		window:              window,
@@ -40,9 +50,9 @@ func newLoginLimiter(max int, window time.Duration, now func() time.Time) *Login
 	}
 }
 
-// TryAcquire atomically reserves one login attempt. Every admitted attempt
-// consumes capacity immediately; call Reset after a successful login.
-func (l *LoginLimiter) TryAcquire(key string) bool {
+// TryAcquire atomically reserves one attempt. Every admitted attempt consumes
+// capacity immediately; call Reset after a successful login.
+func (l *AttemptLimiter) TryAcquire(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -59,13 +69,13 @@ func (l *LoginLimiter) TryAcquire(key string) bool {
 }
 
 // Reset clears failures after a successful login.
-func (l *LoginLimiter) Reset(key string) {
+func (l *AttemptLimiter) Reset(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.attempts, key)
 }
 
-func (l *LoginLimiter) pruneKey(key string, now time.Time) {
+func (l *AttemptLimiter) pruneKey(key string, now time.Time) {
 	cutoff := now.Add(-l.window)
 	attempts := l.attempts[key]
 	first := 0
@@ -83,7 +93,7 @@ func (l *LoginLimiter) pruneKey(key string, now time.Time) {
 
 // maintain prunes idle keys at a bounded frequency and enforces the hard key
 // cap by evicting the key with the oldest most-recent attempt.
-func (l *LoginLimiter) maintain(now time.Time) {
+func (l *AttemptLimiter) maintain(now time.Time) {
 	if !l.lastMaintenance.IsZero() && now.Sub(l.lastMaintenance) < l.maintenanceInterval {
 		return
 	}
@@ -107,7 +117,7 @@ func (l *LoginLimiter) maintain(now time.Time) {
 	l.enforceCap()
 }
 
-func (l *LoginLimiter) enforceCap() {
+func (l *AttemptLimiter) enforceCap() {
 	for len(l.attempts) > l.maxKeys {
 		var oldestKey string
 		var oldest time.Time
