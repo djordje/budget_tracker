@@ -362,3 +362,115 @@ func TestSummaryConcurrentWritesRemainConsistent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestSummaryReadsOneSnapshot proves that a summary's entries and rates come
+// from one REPEATABLE READ snapshot rather than two READ COMMITTED statements.
+// A writer removes the entry and its rate in one transaction and holds an
+// ACCESS EXCLUSIVE lock on exchange_rates, which lets the report's entries read
+// finish against the pre-commit state while its following rate read waits. With
+// READ COMMITTED the waiting rate read takes a fresh snapshot after the commit,
+// sees no rate, and returns Complete == false with the entry counted as missing;
+// requiring Complete == true and the pre-commit rate's converted total therefore
+// only holds when both reads share the earlier snapshot.
+func TestSummaryReadsOneSnapshot(t *testing.T) {
+	fixture := newReportFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	fixture.rate(t, "EUR", "RSD", "100", reportDate(2026, 10, 15), false)
+	fixture.entry(t, fixture.admin.User.ID, finance.KindIncome, "100", "EUR", reportDate(2026, 10, 15), false)
+
+	params := SummaryParams{
+		HouseholdID:     fixture.householdID,
+		ActorID:         fixture.admin.User.ID,
+		Scope:           finance.ScopeAll,
+		From:            reportDate(2026, 10, 1),
+		To:              reportDate(2026, 10, 31),
+		DisplayCurrency: "RSD",
+	}
+
+	writer, err := fixture.pool.Begin(ctx)
+	require.NoError(t, err, "begin writer transaction")
+	t.Cleanup(func() {
+		rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer rollbackCancel()
+		_ = writer.Rollback(rollbackCtx)
+	})
+
+	var writerPID int
+	require.NoError(t, writer.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&writerPID), "writer backend id")
+
+	// ACCESS EXCLUSIVE blocks the report's rate read, and a plain SELECT takes
+	// ACCESS SHARE, which does not conflict with the row locks taken by the
+	// deletes below, so the report's entries read still completes.
+	_, err = writer.Exec(ctx, "LOCK TABLE exchange_rates IN ACCESS EXCLUSIVE MODE")
+	require.NoError(t, err, "lock exchange_rates")
+	_, err = writer.Exec(ctx, "DELETE FROM exchange_rates WHERE household_id = $1", fixture.householdID)
+	require.NoError(t, err, "delete exchange rates")
+	_, err = writer.Exec(ctx, "DELETE FROM incomes WHERE household_id = $1", fixture.householdID)
+	require.NoError(t, err, "delete entries")
+
+	type summaryResult struct {
+		summary Summary
+		err     error
+	}
+	results := make(chan summaryResult, 1)
+	go func() {
+		summary, err := fixture.reporting.Summary(ctx, params)
+		results <- summaryResult{summary: summary, err: err}
+	}()
+
+	// The report has read the entries once a backend waits on the writer's lock,
+	// because the rate read is the statement that follows the entries read.
+	require.Eventually(t, func() bool {
+		return backendWaitsOn(t, fixture.pool, writerPID)
+	}, 30*time.Second, 5*time.Millisecond, "the report never blocked on the exchange-rate read")
+
+	require.NoError(t, writer.Commit(ctx), "commit writer transaction")
+
+	var received summaryResult
+	select {
+	case received = <-results:
+	case <-time.After(30 * time.Second):
+		require.Fail(t, "summary did not finish after the writer committed")
+		return
+	}
+	require.NoError(t, received.err, "Summary() error")
+	summary := received.summary
+	assert.True(t, summary.Complete, "summary = %+v", summary)
+	assert.Equal(t, 1, summary.EntryCount, "summary = %+v", summary)
+	assert.Equal(t, 1, summary.IncludedEntryCount, "summary = %+v", summary)
+	assert.Zero(t, summary.MissingEntryCount, "summary = %+v", summary)
+	assert.Equal(t, int64(1_000_000), summary.IncomeMinor, "summary = %+v", summary)
+	assert.Empty(t, summary.MissingRates, "summary = %+v", summary)
+
+	// The writer's change did land, so the summary above can only come from the
+	// snapshot taken before the commit.
+	var rates, entries int
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM exchange_rates WHERE household_id = $1", fixture.householdID,
+	).Scan(&rates), "count exchange rates")
+	require.NoError(t, fixture.pool.QueryRow(ctx,
+		"SELECT count(*) FROM incomes WHERE household_id = $1", fixture.householdID,
+	).Scan(&entries), "count entries")
+	assert.Zero(t, rates, "committed writer left an exchange rate")
+	assert.Zero(t, entries, "committed writer left an entry")
+}
+
+// backendWaitsOn reports whether any backend is waiting for a lock held by
+// blockerPID. Testify runs Eventually conditions in a goroutine, so failures
+// are logged instead of asserted.
+func backendWaitsOn(t *testing.T, pool *pgxpool.Pool, blockerPID int) bool {
+	t.Helper()
+	var blocked int
+	err := pool.QueryRow(context.Background(), `
+		SELECT count(*)
+		FROM pg_stat_activity
+		WHERE wait_event_type = 'Lock'
+		  AND $1 = ANY (pg_blocking_pids(pid))`, blockerPID).Scan(&blocked)
+	if err != nil {
+		t.Logf("poll for a blocked report read: %v", err)
+		return false
+	}
+	return blocked > 0
+}
