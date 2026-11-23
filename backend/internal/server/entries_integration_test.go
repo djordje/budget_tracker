@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,13 +106,9 @@ func TestEntryAPIContractsAndAuthorization(t *testing.T) {
 		require.NoError(t, err, "add member")
 	}
 
-	response := member.postForm(t, "/app/active-household", url.Values{
-		"csrf_token":   {memberCSRF},
-		"household_id": {homeID.String()},
-	})
-	readBody(t, response)
+	member.visitHouseholdEntries(t, homeID)
 
-	response = admin.apiRequest(t, http.MethodGet, "/api/v1/currencies", nil, "")
+	response := admin.apiRequest(t, http.MethodGet, "/api/v1/currencies", nil, "")
 	require.Equal(t, http.StatusOK, response.StatusCode, "currencies")
 	var currencies currenciesEnvelope
 	decodeBody(t, response, &currencies)

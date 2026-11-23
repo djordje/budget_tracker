@@ -147,12 +147,6 @@ func TestOptionsAndPreferencesHTML(t *testing.T) {
 	); err != nil {
 		require.NoError(t, err, "add member")
 	}
-	response = member.postForm(t, "/app/active-household", url.Values{
-		"csrf_token":   {memberCSRF},
-		"household_id": {homeID.String()},
-	})
-	readBody(t, response)
-
 	response, err := member.follow.Get(member.baseURL + householdBase + "/preferences")
 	require.NoError(t, err, "GET preferences")
 	body = readBody(t, response)

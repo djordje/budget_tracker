@@ -139,11 +139,7 @@ func TestReportsHTMLFlow(t *testing.T) {
 	); err != nil {
 		require.NoError(t, err, "add member")
 	}
-	response = member.postForm(t, "/app/active-household", url.Values{
-		"csrf_token":   {memberCSRF},
-		"household_id": {homeID.String()},
-	})
-	readBody(t, response)
+	member.visitHouseholdEntries(t, homeID)
 	createEntryAPI(t, member, memberCSRF, "/api/v1/incomes", map[string]any{
 		"amount": "20", "currency_code": "RSD", "entry_date": "2026-10-15",
 	})

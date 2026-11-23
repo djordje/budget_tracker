@@ -19,13 +19,33 @@ func householdURL(id uuid.UUID, suffix string) string {
 	return "/app/" + id.String() + suffix
 }
 
+// Section is the top-level destination the shared navigation marks as active.
+type Section string
+
+// Page is the exact destination the shared navigation marks with aria-current.
+type Page string
+
+// Sections and pages are matched when the route is registered, never from the
+// request URL. templates/_navigation.html compares against these values.
+const (
+	SectionEntries Section = "entries"
+	SectionReports Section = "reports"
+	SectionMore    Section = "more"
+
+	PageEntries       Page = "entries"
+	PageReports       Page = "reports"
+	PageExchangeRates Page = "exchange-rates"
+	PagePreferences   Page = "preferences"
+	PageSettings      Page = "settings"
+)
+
 type householdContextKey struct{}
 
 type householdContext struct {
 	Household   *households.Household
 	Memberships []households.Household
-	Section     string
-	Page        string
+	Section     Section
+	Page        Page
 }
 
 func scopeFromRequest(r *http.Request) householdContext {
@@ -46,7 +66,7 @@ func scopedHousehold(r *http.Request) (*households.Household, error) {
 // Scoped authenticates the request, then authorizes the URL household before
 // any page or mutation runs. Section and page come from the matched route
 // registration.
-func (h *Handler) Scoped(section, page string, next http.HandlerFunc) http.HandlerFunc {
+func (h *Handler) Scoped(section Section, page Page, next http.HandlerFunc) http.HandlerFunc {
 	return RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		id, err := householdIDFromPath(r)
 		if err != nil {

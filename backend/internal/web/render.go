@@ -13,17 +13,27 @@ import (
 )
 
 type pageData struct {
-	Title             string
-	Year              int
-	Authenticated     bool
-	User              auth.User
-	Households        []households.Household
-	ActiveHousehold   *households.Household
-	ActiveHouseholdID string
-	Section           string
-	Page              string
-	CSRF              string
-	Notice            string
+	Title           string
+	Year            int
+	Authenticated   bool
+	User            auth.User
+	Households      []households.Household
+	ActiveHousehold *households.Household
+	Section         Section
+	CurrentPage     Page
+	CSRF            string
+	Notice          string
+}
+
+// SwitchDestination keeps an equivalent list, but never carries filters or
+// a resource ID into another household.
+func (p pageData) SwitchDestination() string {
+	switch p.CurrentPage {
+	case PageReports, PageExchangeRates:
+		return "/" + string(p.CurrentPage)
+	default:
+		return "/entries"
+	}
 }
 
 type errorPageData struct {
@@ -46,9 +56,8 @@ func (h *Handler) basePageData(r *http.Request, title string) pageData {
 	if scope := scopeFromRequest(r); scope.Household != nil {
 		data.Households = scope.Memberships
 		data.ActiveHousehold = scope.Household
-		data.ActiveHouseholdID = scope.Household.ID.String()
 		data.Section = scope.Section
-		data.Page = scope.Page
+		data.CurrentPage = scope.Page
 	}
 	return data
 }

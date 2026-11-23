@@ -129,35 +129,6 @@ func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, householdURL(householdID, "/settings?notice=household_saved"), http.StatusSeeOther)
 }
 
-// ActivateHousehold changes the session's active household.
-func (h *Handler) ActivateHousehold(w http.ResponseWriter, r *http.Request) {
-	session := sessionFromContext(r)
-	if err := r.ParseForm(); err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
-		return
-	}
-
-	householdID, err := uuid.Parse(r.FormValue("household_id"))
-	if err != nil {
-		h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
-		return
-	}
-	if err := h.sessions.SetActiveHousehold(r.Context(), session.TokenHash, session.User.ID, &householdID); err != nil {
-		switch {
-		case errors.Is(err, auth.ErrHouseholdAccess):
-			h.renderError(w, r, http.StatusNotFound, "Household not found", "That household is not available.")
-		case errors.Is(err, auth.ErrSessionNotFound):
-			h.cookies.Clear(w)
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-		default:
-			h.internalError(w, r, err)
-		}
-		return
-	}
-
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
-}
-
 // UpdateHouseholdOptions updates household currency defaults.
 func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request) {
 	householdID, err := householdIDFromPath(r)

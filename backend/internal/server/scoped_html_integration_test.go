@@ -137,6 +137,41 @@ func TestScopedHTMLKeepsTwoTabsIndependent(t *testing.T) {
 	}
 }
 
+func TestHouseholdNavigationFollowsMatchedPage(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+	baseA := "/app/" + createHouseholdHTML(t, client, csrf, "First home").String()
+	baseB := "/app/" + createHouseholdHTML(t, client, csrf, "Second home").String()
+	for _, tc := range []struct {
+		path, switchTo, current string
+	}{
+		{"/entries?type=income", "/entries", "/entries"},
+		{"/reports?currency=EUR", "/reports", "/reports"},
+		{"/spendings/new?section=reports", "/entries", ""},
+		{"/preferences", "/entries", "/preferences"},
+		{"/exchange-rates", "/exchange-rates", "/exchange-rates"},
+		{"/settings", "/entries", "/settings"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			response, err := client.noRedirect.Get(client.baseURL + baseA + tc.path)
+			require.NoError(t, err)
+			body := readBody(t, response)
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			assert.Contains(t, body, `aria-label="Households: First home"`)
+			assert.Contains(t, body, `href="`+baseB+tc.switchTo+`">Second home</a>`)
+			assert.Contains(t, body, `href="/app/households/new">Create household</a>`)
+			assert.Contains(t, body, `<details name="header-menu"`)
+			assert.Contains(t, body, `<span class="sr-only">Menu</span>`)
+			if tc.current == "" {
+				assert.Contains(t, body, `class="menu-item menu-active" href="`+baseA+`/entries">Entries</a>`)
+				assert.NotContains(t, body, `aria-current="page"`)
+			} else {
+				assert.Contains(t, body, `href="`+baseA+tc.current+`" aria-current="page"`)
+			}
+		})
+	}
+}
+
 func TestRemovedHTMLRoutesDoNotFallBack(t *testing.T) {
 	client := newTestClient(t)
 	csrf := client.registerHTML(t, "ada@example.com")
@@ -152,7 +187,7 @@ func TestRemovedHTMLRoutesDoNotFallBack(t *testing.T) {
 		assert.Empty(t, response.Header.Get("Location"), path)
 	}
 	for _, path := range []string{
-		"/app/preferences", "/app/incomes", "/app/spendings", "/app/exchange-rates", "/app/spendings/42/delete",
+		"/app/preferences", "/app/incomes", "/app/spendings", "/app/exchange-rates", "/app/spendings/42/delete", "/app/active-household",
 		"/app/households/" + id.String() + "/options",
 	} {
 		response := client.postFormNoRedirect(t, path, url.Values{"csrf_token": {csrf}})

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <meta name="description" content="A clear, shared view of your household's income and spending.">
-    <meta name="htmx-config" content='{"allowEval":false,"includeIndicatorStyles":false}'>
+    <meta name="htmx-config" content='{"allowEval":false,"includeIndicatorStyles":false,"historyRestoreAsHxRequest":false}'>
     <title>{{.Title}}</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
@@ -13,75 +13,44 @@
     <script src="/static/js/app.js" defer></script>
   </head>
   <body class="flex min-h-full flex-col text-stone-900 antialiased">
-    <a href="#main" class="sr-only rounded-md bg-white px-4 py-2 font-semibold text-emerald-700 shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10">
+    <a href="#main" class="sr-only rounded-md bg-white px-4 py-2 font-semibold text-emerald-700 shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30">
       Skip to content
     </a>
 
     <header class="border-b border-stone-200 bg-white">
-      <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <a href="{{if .Authenticated}}/app{{else}}/{{end}}" class="flex items-center gap-3 rounded-lg font-semibold tracking-tight text-stone-900">
-          <span class="grid size-9 place-items-center rounded-xl bg-emerald-700 text-white shadow-sm" aria-hidden="true">
+      <div class="relative mx-auto flex max-w-5xl items-center gap-2 px-4 py-2 sm:px-6">
+        <a href="{{if .ActiveHousehold}}{{householdURL .ActiveHousehold.ID "/entries"}}{{else if .Authenticated}}/app{{else}}/{{end}}" class="flex min-h-11 min-w-11 shrink-0 items-center gap-2 rounded-lg font-semibold tracking-tight text-stone-900">
+          <span class="grid size-11 place-items-center rounded-xl bg-emerald-700 text-white shadow-sm" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" class="size-5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
               <path d="M4 19V11M10 19V7M16 19V4M22 19H2"/>
             </svg>
           </span>
-          Budget Tracker
+          <span class="sr-only lg:not-sr-only">Budget Tracker</span>
         </a>
 
-        {{if .Authenticated}}
-          <div class="flex items-center gap-3">
-            <nav class="hidden items-center gap-1 md:flex" aria-label="Main">
-              {{template "household_links" .}}
+        {{if .ActiveHousehold}}
+          {{template "household_picker" .}}
+          <nav class="ml-auto hidden shrink-0 items-center gap-1 md:flex" aria-label="Main">
+            {{template "household_navigation" .}}
+          </nav>
+          <details name="header-menu" class="ml-auto shrink-0 md:hidden">
+            <summary class="menu-trigger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+              <span class="sr-only">Menu</span>
+            </summary>
+            <nav class="header-popover absolute right-4 top-full z-20 space-y-1 sm:right-6" aria-label="Main">
+              {{template "household_navigation" .}}
             </nav>
-            {{if .ActiveHousehold}}
-              <span class="hidden max-w-40 truncate text-sm font-medium text-stone-600 md:inline">{{.ActiveHousehold.Name}}</span>
-            {{end}}
-            <span class="hidden text-sm font-medium text-stone-600 sm:inline">{{.User.FirstName}}</span>
-            <form method="post" action="/logout">
-              <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-              <button type="submit" class="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
-                Sign out
-              </button>
-            </form>
-          </div>
+          </details>
+        {{else if .Authenticated}}
+          <div class="ml-auto">{{template "sign_out" .}}</div>
         {{else}}
-          <nav class="flex items-center gap-2" aria-label="Account">
-            <a href="/login" class="rounded-lg px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
-              Sign in
-            </a>
-            <a href="/register" class="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
-              Create account
-            </a>
+          <nav class="ml-auto flex items-center gap-2" aria-label="Account">
+            <a href="/login" class="menu-item">Sign in</a>
+            <a href="/register" class="menu-item bg-emerald-700 text-white hover:bg-emerald-800">Create account</a>
           </nav>
         {{end}}
       </div>
-
-      {{if .Authenticated}}
-        <nav class="border-t border-stone-100 bg-stone-50 md:hidden" aria-label="Mobile main navigation">
-          <div class="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-3 py-2 sm:px-6">
-            {{template "household_links" .}}
-          </div>
-        </nav>
-      {{end}}
-
-      {{if gt (len .Households) 1}}
-        <div class="border-t border-stone-100 bg-stone-50">
-          <div class="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2 sm:px-6">
-            <form method="post" action="/app/active-household" class="flex items-center gap-2">
-              <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-              <label for="household_switcher" class="text-xs font-semibold uppercase tracking-wide text-stone-500">Household</label>
-              <select id="household_switcher" name="household_id" class="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-800 shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20">
-                {{range .Households}}
-                  <option value="{{.ID}}" {{if eq .ID.String $.ActiveHouseholdID}}selected{{end}}>{{.Name}}</option>
-                {{end}}
-              </select>
-              <button type="submit" class="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-stone-700 shadow-sm hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
-                Switch
-              </button>
-            </form>
-          </div>
-        </div>
-      {{end}}
     </header>
 
     {{with .Notice}}
@@ -104,15 +73,4 @@
     </footer>
   </body>
 </html>
-{{end}}
-
-{{define "household_links"}}
-  {{with .ActiveHousehold}}
-    <a class="px-2 py-2" href="{{householdURL .ID "/entries"}}">Entries</a>
-    <a class="px-2 py-2" href="{{householdURL .ID "/reports"}}">Reports</a>
-    <a class="px-2 py-2" href="{{householdURL .ID "/exchange-rates"}}">Rates</a>
-    <a class="px-2 py-2" href="{{householdURL .ID "/preferences"}}">Preferences</a>
-    {{if .IsAdmin}}<a class="px-2 py-2" href="{{householdURL .ID "/settings"}}">Settings</a>{{end}}
-    <a class="px-2 py-2" href="/app/households/new">Create household</a>
-  {{end}}
 {{end}}

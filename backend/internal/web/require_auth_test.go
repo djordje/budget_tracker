@@ -201,13 +201,6 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 			handle:     func(h *Handler) http.HandlerFunc { return h.UpdateHousehold },
 		},
 		{
-			name:   "activate household",
-			method: http.MethodPost,
-			path:   "/app/active-household",
-			form:   "household_id=" + householdID.String(),
-			handle: func(h *Handler) http.HandlerFunc { return h.ActivateHousehold },
-		},
-		{
 			name:       "update household options",
 			method:     http.MethodPost,
 			path:       "/app/households/" + householdID.String() + "/options",
@@ -315,7 +308,7 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scoped := tt.path != "/app" && tt.path != "/app/households" && tt.path != "/app/active-household"
+			scoped := tt.path != "/app" && tt.path != "/app/households"
 			wrap := func(h *Handler) http.HandlerFunc {
 				if scoped {
 					return h.Scoped("", "", tt.handle(h))

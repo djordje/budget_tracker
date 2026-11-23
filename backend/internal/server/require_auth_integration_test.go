@@ -46,7 +46,6 @@ func TestProtectedHTMLRoutesRedirectAnonymousRequests(t *testing.T) {
 		{http.MethodGet, base},
 		{http.MethodGet, base + "/settings"},
 		{http.MethodPost, base + "/settings"},
-		{http.MethodPost, "/app/active-household"},
 		{http.MethodGet, base + "/preferences"},
 		{http.MethodPost, base + "/preferences"},
 		{http.MethodPost, base + "/settings/options"},

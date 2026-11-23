@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -175,11 +174,7 @@ func TestSummaryAPI(t *testing.T) {
 	); err != nil {
 		require.NoError(t, err, "add member")
 	}
-	response := member.postForm(t, "/app/active-household", url.Values{
-		"csrf_token":   {memberCSRF},
-		"household_id": {homeID.String()},
-	})
-	readBody(t, response)
+	member.visitHouseholdEntries(t, homeID)
 
 	createRateAPI(t, admin, adminCSRF, map[string]any{
 		"from_currency_code": "EUR", "to_currency_code": "RSD",
@@ -200,7 +195,7 @@ func TestSummaryAPI(t *testing.T) {
 		"amount": "20", "currency_code": "USD", "entry_date": "2026-10-15",
 	})
 
-	response = admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31&currency=RSD", nil, "")
+	response := admin.apiRequest(t, http.MethodGet, "/api/v1/reports/summary?scope=all&from=2026-10-01&to=2026-10-31&currency=RSD", nil, "")
 	if !assert.Equal(t, http.StatusOK, response.StatusCode, "summary") {
 		t.Fatalf("body:\n%s", readBody(t, response))
 	}

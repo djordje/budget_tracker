@@ -106,6 +106,7 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 	body = readBody(t, response)
 	assert.Equal(t, http.StatusForbidden, response.StatusCode, "member settings; body:\n%s", body)
 	assert.Contains(t, body, "Only household admins")
+	assert.NotContains(t, grace.visitHouseholdEntries(t, homeID), `href="`+settingsPath+`"`)
 
 	response, err = client.follow.Get(client.baseURL + settingsPath)
 	require.NoError(t, err, "admin GET settings")
@@ -118,14 +119,19 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 	body = readBody(t, response)
 	assert.Contains(t, body, "Second home", "second household was not made active")
 
-	response = client.postForm(t, "/app/active-household", url.Values{
-		"csrf_token":   {csrf},
-		"household_id": {homeID.String()},
-	})
-	body = readBody(t, response)
-	require.Equal(t, http.StatusOK, response.StatusCode, "switch household; body:\n%s", body)
-	assert.Equal(t, "/app/"+homeID.String()+"/entries", response.Request.URL.Path)
-	assert.Contains(t, body, "Shared home")
+	assert.Contains(t, body, `href="/app/`+homeID.String()+`/entries">Shared home</a>`)
+	body = client.visitHouseholdEntries(t, homeID)
+	assert.Contains(t, body, `aria-label="Households: Shared home"`)
+}
+
+func (c *testClient) visitHouseholdEntries(t *testing.T, id uuid.UUID) string {
+	t.Helper()
+	path := "/app/" + id.String() + "/entries"
+	response, err := c.noRedirect.Get(c.baseURL + path)
+	require.NoError(t, err)
+	body := readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode, "GET %s; body:\n%s", path, body)
+	return body
 }
 
 func TestHouseholdHTMLRequiresAuth(t *testing.T) {
