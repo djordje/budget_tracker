@@ -122,8 +122,9 @@ goroutines; report those nonfatally and return instead.
   and share manually.
 - Exchange rates are entered manually; automatic providers, global/shared
   rates, rolling-window rates, and chained conversion are deferred.
-- The browser smoke coverage is represented by HTTP integration tests. A real
-  browser automation suite is not part of this local MVP.
+- There is no checked-in browser automation suite. HTTP integration tests
+  cover the canonical routes and two-tab writes; see the mobile UI plan for
+  the most recent browser smoke matrix and physical-device gaps.
 - Hard deletion is used; audit history and soft deletion are deferred.
 - MCP write access and native clients are not implemented.
 - Deployment, TLS termination, backups, and production monitoring are outside
@@ -131,7 +132,8 @@ goroutines; report those nonfatally and return instead.
 
 ## MVP acceptance checks
 
-The checklist in the active plan maps to automated coverage:
+The [mobile UI plan](plans/20261122_190603_mobile_first_ui.md) records the browser
+smoke checks. Automated coverage includes:
 
 - Registration, login/logout, CSRF, household creation, and role boundaries:
   `internal/server` integration tests.
@@ -143,6 +145,8 @@ The checklist in the active plan maps to automated coverage:
 - Rate precedence, exact conversion, rounding, date boundaries, and missing
   rates: `internal/reporting` table-driven and PostgreSQL tests.
 - End-to-end onboarding-to-report path: `TestMVPWorkflowSmoke`.
+- Canonical HTML URLs, same-session household tabs, and mismatched resource
+  IDs: `internal/server/scoped_html_integration_test.go`.
 
 ## Troubleshooting
 

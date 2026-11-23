@@ -102,33 +102,36 @@ migration and check tasks on every push and pull request.
 
 ## Accounts and households
 
-Registration, sign-in, sign-out, household creation, household switching, and
-admin-only household settings are implemented. A user can belong to multiple
-households; the selected household is stored on the session by token hash.
-Creating a household inserts the household, its admin membership, default
-options, and the active-household preference in one transaction, so an
-activation failure leaves no household behind. Household options default to
-RSD; editable currency preferences arrive with the preferences milestone.
+A user can belong to multiple households. On HTML pages, the URL identifies
+which household to read or write. The picker links directly to another
+household, so forms open in other tabs keep their original household. `/app`
+starts with the session's last-used accessible household (or the oldest
+accessible household if none is remembered); users without memberships go to
+onboarding. JSON endpoints that use an active household still use the session.
+Creating a household inserts the household, its admin membership, currency
+defaults, and the session preference in one transaction. Household currency
+options default to RSD.
 Expired sessions are removed opportunistically after successful registration
 or login, at most once per hour per process.
 
 Current HTML routes:
 
 ```text
-/                              landing page
-/register, /login              account flows
-/app                           dashboard
-/app/households/new            create a household
-/app/households/{id}/settings  admin settings and members
-/app/entries                   filtered entry list
-/app/incomes/new               add income
-/app/spendings/new             add spending
-/app/incomes/{id}/edit         edit income
-/app/spendings/{id}/edit       edit spending
-/app/exchange-rates            manage exact and monthly rates
-/app/reports                   converted household summary
-/app/preferences               personal currency overrides
-/invitations/{token}           public invitation acceptance
+/                                         landing page
+/register, /login                         account flows
+/app                                      redirect to the last-used accessible household
+/app/households/new                       create a household
+/app/{householdID}                        redirect to that household's Entries
+/app/{householdID}/entries                filtered entry list and recording actions
+/app/{householdID}/incomes/new            add income
+/app/{householdID}/spendings/new          add spending
+/app/{householdID}/incomes/{id}/edit      edit income
+/app/{householdID}/spendings/{id}/edit    edit spending
+/app/{householdID}/exchange-rates         manage exact and monthly rates
+/app/{householdID}/reports                converted household summary
+/app/{householdID}/preferences            personal currency overrides
+/app/{householdID}/settings               admin settings, members, and invitations
+/invitations/{token}                      public invitation acceptance
 ```
 
 Current JSON endpoints (cookie authentication, CSRF header on unsafe methods):
@@ -173,7 +176,7 @@ Admins invite members by email and role and receive a one-time invitation link
 to share manually; email delivery is not part of the MVP. Invitation tokens
 are hashed at rest, expire after seven days, are single-use, and require the
 accepting account's normalized email to match. Acceptance creates the
-membership and makes the household active.
+membership and opens Entries for the joined household.
 
 Household currency defaults are admin-managed. Each member can override
 income, spending, and display currencies for a household or inherit the
@@ -182,11 +185,12 @@ defaults. Entry forms and reports use the resolved effective values.
 ## Income and spending
 
 Amounts are parsed from decimal strings into integer minor units using the
-currency's exponent. The original amount and currency are preserved. Household
-defaults supply the preselected currency and date, and the current user is the
-preselected attribution. The entry list supports type tabs, date filters,
-personal/all scopes for admins, pagination, empty states, and progressive HTMX
-updates with non-JavaScript form fallbacks.
+currency's exponent. The original amount and currency are preserved. New forms
+preselect the effective currency, today's date, and personal attribution;
+only the amount normally needs input. The entry list offers both recording
+actions and compact rows on phones. Entry type, date filters, scope, and
+pagination stay in the URL, including when applying filters with HTMX. The
+forms, top navigation, and picker also work without JavaScript.
 
 Entry IDs are positive integers and JSON represents them as decimal strings.
 Invalid, zero, negative, or overflowing route IDs are rejected before any
