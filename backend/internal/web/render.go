@@ -47,6 +47,12 @@ func (h *Handler) basePageData(r *http.Request, title string) pageData {
 
 func (h *Handler) newPageData(r *http.Request, title string) (pageData, error) {
 	data := h.basePageData(r, title)
+	if scope := scopeFromRequest(r); scope.Household != nil {
+		data.Households = scope.Memberships
+		data.ActiveHousehold = scope.Household
+		data.ActiveHouseholdID = scope.Household.ID.String()
+		return data, nil
+	}
 	session, ok := auth.FromContext(r.Context())
 	if !ok {
 		return data, nil
@@ -136,6 +142,9 @@ func (h *Handler) pageDataOrError(w http.ResponseWriter, r *http.Request, title 
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, status int, data any) {
+	if status == http.StatusOK {
+		h.rememberHousehold(r)
+	}
 	h.renderTemplate(w, r, page, "layout", status, data)
 }
 
