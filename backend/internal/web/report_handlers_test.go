@@ -51,11 +51,12 @@ func TestReportPageUsesReportSpecificErrors(t *testing.T) {
 				User:              auth.User{ID: userID},
 				ActiveHouseholdID: &householdID,
 			}
-			request := httptest.NewRequest(http.MethodGet, "/app/reports", nil)
+			request := httptest.NewRequest(http.MethodGet, householdURL(householdID, "/reports"), nil)
+			request.SetPathValue("householdID", householdID.String())
 			request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 			recorder := httptest.NewRecorder()
 			auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
-				Load(http.HandlerFunc(handler.ReportsPage)).ServeHTTP(recorder, request)
+				Load(handler.Scoped("reports", "reports", handler.ReportsPage)).ServeHTTP(recorder, request)
 
 			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			body := recorder.Body.String()

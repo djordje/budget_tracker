@@ -55,6 +55,7 @@ func serveEntryDelete(
 	t *testing.T,
 	householdsService HouseholdService,
 	entries EntryService,
+	householdID uuid.UUID,
 	htmx bool,
 ) *httptest.ResponseRecorder {
 	t.Helper()
@@ -70,7 +71,8 @@ func serveEntryDelete(
 
 	userID := uuid.New()
 	session := auth.Session{UserID: userID, User: auth.User{ID: userID}}
-	request := httptest.NewRequest(http.MethodPost, "/app/spendings/42/delete", nil)
+	request := httptest.NewRequest(http.MethodPost, householdURL(householdID, "/spendings/42/delete"), nil)
+	request.SetPathValue("householdID", householdID.String())
 	request.SetPathValue("entryID", "42")
 	if htmx {
 		request.Header.Set("HX-Request", "true")
@@ -78,7 +80,7 @@ func serveEntryDelete(
 	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 	recorder := httptest.NewRecorder()
 	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
-		Load(http.HandlerFunc(handler.DeleteSpending)).ServeHTTP(recorder, request)
+		Load(handler.Scoped("entries", "", handler.DeleteSpending)).ServeHTTP(recorder, request)
 	return recorder
 }
 
@@ -100,7 +102,7 @@ func TestHTMXDeleteFailuresReturnErrorFragments(t *testing.T) {
 				err:   tt.err,
 				entry: finance.Entry{ID: 42, Kind: finance.KindSpending, HouseholdID: household.ID},
 			}
-			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, true)
+			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, household.ID, true)
 
 			assert.True(t, entries.called, "Delete() was not called")
 			require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
@@ -132,7 +134,7 @@ func TestDeleteFailuresKeepRealStatusOnFullPages(t *testing.T) {
 				err:   tt.err,
 				entry: finance.Entry{ID: 42, Kind: finance.KindSpending, HouseholdID: household.ID},
 			}
-			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, false)
+			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{household}}, entries, household.ID, false)
 
 			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			assert.Contains(t, recorder.Body.String(), "<html", "failure did not return a full page")
@@ -160,7 +162,7 @@ func TestDeleteRejectsEntryFromAnotherHousehold(t *testing.T) {
 				Kind:        finance.KindSpending,
 				HouseholdID: other.ID,
 			}}
-			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{active}}, entries, tt.htmx)
+			recorder := serveEntryDelete(t, stubHouseholds{households: []households.Household{active}}, entries, active.ID, tt.htmx)
 
 			require.Equal(t, tt.wantStatus, recorder.Code, "body = %s", recorder.Body.String())
 			assert.Equal(t, 0, entries.deleteCalls, "Delete() calls")

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -179,10 +180,10 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 		handle     func(*Handler) http.HandlerFunc
 	}{
 		{
-			name:   "dashboard",
+			name:   "app landing",
 			method: http.MethodGet,
 			path:   "/app",
-			handle: func(h *Handler) http.HandlerFunc { return h.Dashboard },
+			handle: func(h *Handler) http.HandlerFunc { return h.App },
 		},
 		{
 			name:   "create household",
@@ -314,10 +315,20 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			scoped := tt.path != "/app" && tt.path != "/app/households" && tt.path != "/app/active-household"
+			wrap := func(h *Handler) http.HandlerFunc {
+				if scoped {
+					return h.Scoped("", "", tt.handle(h))
+				}
+				return RequireAuth(tt.handle(h))
+			}
 			newRequest := func() *http.Request {
 				request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.form))
 				if tt.form != "" {
 					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				}
+				if scoped {
+					request.SetPathValue("householdID", householdID.String())
 				}
 				for name, value := range tt.pathValues {
 					request.SetPathValue(name, value)
@@ -329,11 +340,15 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 			anonymousHandler := countingHandler(t, householdID, anonymousCalls)
 			recorder := httptest.NewRecorder()
 			auth.NewMiddleware(stubSessionLookup{}, auth.CookieConfig{}, discardLogger()).
-				Load(RequireAuth(tt.handle(anonymousHandler))).
+				Load(wrap(anonymousHandler)).
 				ServeHTTP(recorder, newRequest())
 
 			require.Equal(t, http.StatusSeeOther, recorder.Code, "anonymous request body = %s", recorder.Body.String())
-			assert.Equal(t, "/login", recorder.Header().Get("Location"), "anonymous request Location")
+			wantLocation := "/login"
+			if tt.method == http.MethodGet {
+				wantLocation += "?next=" + url.QueryEscape(tt.path)
+			}
+			assert.Equal(t, wantLocation, recorder.Header().Get("Location"), "anonymous request Location")
 			assert.Zero(t, anonymousCalls.total(), "anonymous request reached the services")
 
 			authenticatedCalls := &serviceCalls{}
@@ -342,7 +357,7 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 			request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 			recorder = httptest.NewRecorder()
 			auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, discardLogger()).
-				Load(RequireAuth(tt.handle(authenticatedHandler))).
+				Load(wrap(authenticatedHandler)).
 				ServeHTTP(recorder, request)
 
 			assert.Positive(t, authenticatedCalls.total(),

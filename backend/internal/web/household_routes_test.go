@@ -1,9 +1,11 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,6 +72,71 @@ func TestHouseholdScope(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScopedRequiresSignInBeforeResolvingHousehold(t *testing.T) {
+	h := newTestHandler(t)
+	h.households = stubHouseholds{households: []households.Household{{ID: uuid.New()}}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /app/{householdID}/entries", h.Scoped("entries", "entries", h.Entries))
+
+	for _, path := range []string{"/app/not-a-uuid/entries", householdURL(uuid.New(), "/entries")} {
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+
+		require.Equal(t, http.StatusSeeOther, recorder.Code, "body = %s", recorder.Body.String())
+		assert.Equal(t, "/login?next="+url.QueryEscape(path), recorder.Header().Get("Location"), "Location")
+	}
+}
+
+func TestHouseholdRememberSkipsPrefetch(t *testing.T) {
+	selected := uuid.New()
+
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    int
+	}{
+		{name: "visit", want: 1},
+		{
+			name:    "prefetch",
+			headers: map[string]string{"Sec-Purpose": "prefetch;prerender"},
+		},
+		{
+			name:    "legacy prefetch",
+			headers: map[string]string{"Purpose": "prefetch"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			h.households = stubHouseholds{households: []households.Household{{ID: selected, Name: "Home"}}}
+			sessions := &recordingSessions{}
+			h.sessions = sessions
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /app/{householdID}/entries", h.Scoped("entries", "entries", h.Entries))
+
+			request := householdRequest(h, http.MethodGet, householdURL(selected, "/entries"), nil)
+			for name, value := range tc.headers {
+				request.Header.Set(name, value)
+			}
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+			assert.Equal(t, tc.want, sessions.remembered, "SetActiveHousehold() calls")
+		})
+	}
+}
+
+// recordingSessions counts landing-preference writes.
+type recordingSessions struct {
+	stubSessions
+	remembered int
+}
+
+func (s *recordingSessions) SetActiveHousehold(context.Context, string, uuid.UUID, *uuid.UUID) error {
+	s.remembered++
+	return nil
 }
 
 func householdRequest(h *Handler, method, path string, preferred *uuid.UUID) *http.Request {

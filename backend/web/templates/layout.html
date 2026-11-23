@@ -31,11 +31,7 @@
         {{if .Authenticated}}
           <div class="flex items-center gap-3">
             <nav class="hidden items-center gap-1 md:flex" aria-label="Main">
-              <a href="/app" class="rounded-lg px-2.5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900">Dashboard</a>
-              <a href="/app/entries" class="rounded-lg px-2.5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900">Entries</a>
-              <a href="/app/exchange-rates" class="rounded-lg px-2.5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900">Rates</a>
-              <a href="/app/reports" class="rounded-lg px-2.5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900">Reports</a>
-              <a href="/app/preferences" class="rounded-lg px-2.5 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900">Preferences</a>
+              {{template "household_links" .}}
             </nav>
             {{if .ActiveHousehold}}
               <span class="hidden max-w-40 truncate text-sm font-medium text-stone-600 md:inline">{{.ActiveHousehold.Name}}</span>
@@ -63,11 +59,7 @@
       {{if .Authenticated}}
         <nav class="border-t border-stone-100 bg-stone-50 md:hidden" aria-label="Mobile main navigation">
           <div class="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-3 py-2 sm:px-6">
-            <a href="/app" class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-600 hover:bg-white hover:text-stone-900">Dashboard</a>
-            <a href="/app/entries" class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-600 hover:bg-white hover:text-stone-900">Entries</a>
-            <a href="/app/exchange-rates" class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-600 hover:bg-white hover:text-stone-900">Rates</a>
-            <a href="/app/reports" class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-600 hover:bg-white hover:text-stone-900">Reports</a>
-            <a href="/app/preferences" class="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-600 hover:bg-white hover:text-stone-900">Preferences</a>
+            {{template "household_links" .}}
           </div>
         </nav>
       {{end}}
@@ -112,4 +104,15 @@
     </footer>
   </body>
 </html>
+{{end}}
+
+{{define "household_links"}}
+  {{with .ActiveHousehold}}
+    <a class="px-2 py-2" href="{{householdURL .ID "/entries"}}">Entries</a>
+    <a class="px-2 py-2" href="{{householdURL .ID "/reports"}}">Reports</a>
+    <a class="px-2 py-2" href="{{householdURL .ID "/exchange-rates"}}">Rates</a>
+    <a class="px-2 py-2" href="{{householdURL .ID "/preferences"}}">Preferences</a>
+    {{if .IsAdmin}}<a class="px-2 py-2" href="{{householdURL .ID "/settings"}}">Settings</a>{{end}}
+    <a class="px-2 py-2" href="/app/households/new">Create household</a>
+  {{end}}
 {{end}}

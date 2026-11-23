@@ -199,11 +199,12 @@ func serveHouseholdPage(t *testing.T, handle func(*Handler) http.HandlerFunc) *h
 		User:              auth.User{ID: userID},
 		ActiveHouseholdID: &householdID,
 	}
-	request := httptest.NewRequest(http.MethodGet, "/app", nil)
+	request := httptest.NewRequest(http.MethodGet, householdURL(householdID, ""), nil)
+	request.SetPathValue("householdID", householdID.String())
 	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 	recorder := httptest.NewRecorder()
 	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
-		Load(handle(handler)).ServeHTTP(recorder, request)
+		Load(handler.Scoped("", "", handle(handler))).ServeHTTP(recorder, request)
 	return recorder
 }
 

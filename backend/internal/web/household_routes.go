@@ -2,12 +2,18 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"budgettracker/internal/households"
 )
+
+// errMissingScope reports a handler that ran without Scoped. It is a wiring
+// bug, not something a request can trigger.
+var errMissingScope = errors.New("missing household scope")
 
 func householdURL(id uuid.UUID, suffix string) string {
 	return "/app/" + id.String() + suffix
@@ -27,13 +33,26 @@ func scopeFromRequest(r *http.Request) householdContext {
 	return scope
 }
 
-// Scoped authorizes the URL household before any page or mutation runs.
-// Section and page come from the matched route registration.
+// scopedHousehold returns the household resolved by Scoped. Handlers behind
+// Scoped can read it from pageData, but private helpers that build page data
+// before rendering use this to fail cleanly instead of dereferencing nil.
+func scopedHousehold(r *http.Request) (*households.Household, error) {
+	if selected := scopeFromRequest(r).Household; selected != nil {
+		return selected, nil
+	}
+	return nil, errMissingScope
+}
+
+// Scoped authenticates the request, then authorizes the URL household before
+// any page or mutation runs. Section and page come from the matched route
+// registration.
 func (h *Handler) Scoped(section, page string, next http.HandlerFunc) http.HandlerFunc {
 	return RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		id, err := householdIDFromPath(r)
 		if err != nil {
-			h.renderSettingsError(w, r, households.ErrNotFound)
+			// A single-segment path such as a retired /app/entries bookmark lands
+			// here, so report it as a missing page rather than a missing household.
+			h.renderError(w, r, http.StatusNotFound, "Page not found", "That page is not available.")
 			return
 		}
 		list, err := h.households.List(r.Context(), sessionFromContext(r).User.ID)
@@ -80,7 +99,7 @@ func (h *Handler) HouseholdHome(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) rememberHousehold(r *http.Request) {
 	selected := scopeFromRequest(r).Household
-	if selected == nil || r.Method != http.MethodGet || isHTMX(r) {
+	if selected == nil || r.Method != http.MethodGet || isHTMX(r) || isPrefetch(r) {
 		return
 	}
 	session := sessionFromContext(r)
@@ -90,4 +109,16 @@ func (h *Handler) rememberHousehold(r *http.Request) {
 	if err := h.sessions.SetActiveHousehold(r.Context(), session.TokenHash, session.User.ID, &selected.ID); err != nil {
 		h.logger.Warn("remember household", "error", err)
 	}
+}
+
+// isPrefetch reports speculative loads. Remembering the household on those
+// would move the landing preference when a browser merely preloads a picker
+// link the visitor never follows.
+func isPrefetch(r *http.Request) bool {
+	for _, header := range []string{"Sec-Purpose", "Purpose", "X-Purpose"} {
+		if strings.Contains(strings.ToLower(r.Header.Get(header)), "prefetch") {
+			return true
+		}
+	}
+	return false
 }

@@ -34,7 +34,7 @@ func TestProtectedHTMLRoutesRedirectAnonymousRequests(t *testing.T) {
 	client := newTestClientWithPool(t, pool)
 	csrf := client.csrfToken(t, "/login")
 
-	householdID := uuid.NewString()
+	base := "/app/" + uuid.NewString()
 	invitationID := uuid.NewString()
 	routes := []struct {
 		method string
@@ -43,31 +43,32 @@ func TestProtectedHTMLRoutesRedirectAnonymousRequests(t *testing.T) {
 		{http.MethodGet, "/app"},
 		{http.MethodGet, "/app/households/new"},
 		{http.MethodPost, "/app/households"},
-		{http.MethodGet, "/app/households/" + householdID + "/settings"},
-		{http.MethodPost, "/app/households/" + householdID + "/settings"},
+		{http.MethodGet, base},
+		{http.MethodGet, base + "/settings"},
+		{http.MethodPost, base + "/settings"},
 		{http.MethodPost, "/app/active-household"},
-		{http.MethodGet, "/app/preferences"},
-		{http.MethodPost, "/app/preferences"},
-		{http.MethodPost, "/app/households/" + householdID + "/options"},
-		{http.MethodPost, "/app/households/" + householdID + "/invitations"},
-		{http.MethodPost, "/app/households/" + householdID + "/invitations/" + invitationID + "/delete"},
-		{http.MethodGet, "/app/entries"},
-		{http.MethodGet, "/app/exchange-rates"},
-		{http.MethodPost, "/app/exchange-rates"},
-		{http.MethodGet, "/app/exchange-rates/7/edit"},
-		{http.MethodPost, "/app/exchange-rates/7"},
-		{http.MethodPost, "/app/exchange-rates/7/delete"},
-		{http.MethodGet, "/app/reports"},
-		{http.MethodGet, "/app/incomes/new"},
-		{http.MethodPost, "/app/incomes"},
-		{http.MethodGet, "/app/incomes/42/edit"},
-		{http.MethodPost, "/app/incomes/42"},
-		{http.MethodPost, "/app/incomes/42/delete"},
-		{http.MethodGet, "/app/spendings/new"},
-		{http.MethodPost, "/app/spendings"},
-		{http.MethodGet, "/app/spendings/42/edit"},
-		{http.MethodPost, "/app/spendings/42"},
-		{http.MethodPost, "/app/spendings/42/delete"},
+		{http.MethodGet, base + "/preferences"},
+		{http.MethodPost, base + "/preferences"},
+		{http.MethodPost, base + "/settings/options"},
+		{http.MethodPost, base + "/settings/invitations"},
+		{http.MethodPost, base + "/settings/invitations/" + invitationID + "/delete"},
+		{http.MethodGet, base + "/entries"},
+		{http.MethodGet, base + "/exchange-rates"},
+		{http.MethodPost, base + "/exchange-rates"},
+		{http.MethodGet, base + "/exchange-rates/7/edit"},
+		{http.MethodPost, base + "/exchange-rates/7"},
+		{http.MethodPost, base + "/exchange-rates/7/delete"},
+		{http.MethodGet, base + "/reports?scope=all&currency=RSD"},
+		{http.MethodGet, base + "/incomes/new"},
+		{http.MethodPost, base + "/incomes"},
+		{http.MethodGet, base + "/incomes/42/edit"},
+		{http.MethodPost, base + "/incomes/42"},
+		{http.MethodPost, base + "/incomes/42/delete"},
+		{http.MethodGet, base + "/spendings/new"},
+		{http.MethodPost, base + "/spendings"},
+		{http.MethodGet, base + "/spendings/42/edit"},
+		{http.MethodPost, base + "/spendings/42"},
+		{http.MethodPost, base + "/spendings/42/delete"},
 		{http.MethodPost, "/logout"},
 	}
 
@@ -84,7 +85,11 @@ func TestProtectedHTMLRoutesRedirectAnonymousRequests(t *testing.T) {
 			body := readBody(t, response)
 
 			require.Equal(t, http.StatusSeeOther, response.StatusCode, "body = %s", body)
-			assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
+			want := "/login"
+			if route.method == http.MethodGet {
+				want += "?next=" + url.QueryEscape(route.path)
+			}
+			assert.Equal(t, want, response.Header.Get("Location"), "Location")
 		})
 	}
 

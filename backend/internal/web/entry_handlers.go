@@ -16,8 +16,6 @@ import (
 
 const entryDateLayout = "2006-01-02"
 
-var errNoActiveHousehold = errors.New("no active household")
-
 type entryListPageData struct {
 	pageData
 	Kind        string
@@ -82,14 +80,7 @@ type entryFormValues struct {
 
 // Entries lists the active household's entries.
 func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
-	data, ok := h.pageDataOrError(w, r, "Entries")
-	if !ok {
-		return
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
+	data := h.basePageData(r, "Entries")
 
 	query := r.URL.Query()
 	kind := finance.KindSpending
@@ -155,11 +146,12 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 		toValue = to.Format(entryDateLayout)
 	}
 	baseURL := func(kind finance.Kind, page int) string {
-		return entryListURL(kind, scope, fromValue, toValue, page)
+		return entryListURL(data.ActiveHousehold.ID, kind, scope, fromValue, toValue, page)
 	}
 
 	pageData := entryListPageData{
 		pageData:    data,
+		Kind:        string(kind),
 		KindLabel:   kindLabel(kind),
 		Entries:     rows,
 		ScopeAll:    scope == finance.ScopeAll,
@@ -171,8 +163,8 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 		TotalPages:  result.TotalPages,
 		IncomeURL:   baseURL(finance.KindIncome, 1),
 		SpendingURL: baseURL(finance.KindSpending, 1),
-		NewURL:      "/app/" + kindPlural(kind) + "/new",
-		ClearURL:    "/app/entries?type=" + string(kind),
+		NewURL:      householdURL(data.ActiveHousehold.ID, "/"+kindPlural(kind)+"/new"),
+		ClearURL:    entryListURL(data.ActiveHousehold.ID, kind, finance.ScopeMine, "", "", 1),
 	}
 	if result.Page > 1 {
 		pageData.PreviousURL = baseURL(kind, result.Page-1)
@@ -195,10 +187,6 @@ func (h *Handler) NewSpendingPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.Kind) {
 	data, err := h.entryFormBase(r, kind, false)
-	if errors.Is(err, errNoActiveHousehold) {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -237,10 +225,6 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finan
 	}
 
 	data, err := h.entryFormBase(r, kind, false)
-	if errors.Is(err, errNoActiveHousehold) {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -292,10 +276,6 @@ func (h *Handler) editEntry(w http.ResponseWriter, r *http.Request, kind finance
 		return
 	}
 	data, err := h.entryFormBase(r, kind, true)
-	if errors.Is(err, errNoActiveHousehold) {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -315,7 +295,7 @@ func (h *Handler) editEntry(w http.ResponseWriter, r *http.Request, kind finance
 		h.renderError(w, r, http.StatusForbidden, "Not allowed", "You cannot edit that entry.")
 		return
 	}
-	data.Action = "/app/" + kindPlural(kind) + "/" + strconv.FormatInt(id, 10)
+	data.Action = entryURL(data.ActiveHousehold.ID, kind, id)
 	data.IsEdit = true
 	data.Amount = entry.AmountString()
 	data.CurrencyCode = entry.CurrencyCode
@@ -351,10 +331,6 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 	}
 
 	data, err := h.entryFormBase(r, kind, true)
-	if errors.Is(err, errNoActiveHousehold) {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -369,7 +345,7 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 		return
 	}
 	values := entryFormValuesFromRequest(r)
-	data.Action = "/app/" + kindPlural(kind) + "/" + strconv.FormatInt(id, 10)
+	data.Action = entryURL(data.ActiveHousehold.ID, kind, id)
 	data.IsEdit = true
 	data = applyEntryFormValues(data, values)
 	data.HouseholdWide = entry.IsHouseholdWide()
@@ -422,15 +398,7 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finan
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
 		return
 	}
-	data, err := h.newPageData(r, "Entries")
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
+	data := h.basePageData(r, "Entries")
 	entry, err := h.entries.Get(r.Context(), session.User.ID, kind, id)
 	if err != nil {
 		h.renderEntryDeleteFailure(w, r, kind, err)
@@ -484,13 +452,7 @@ func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool)
 	if isEdit {
 		title = "Edit " + strings.ToLower(kindLabel(kind))
 	}
-	data, err := h.newPageData(r, title)
-	if err != nil {
-		return entryFormPageData{}, err
-	}
-	if data.ActiveHousehold == nil {
-		return entryFormPageData{}, errNoActiveHousehold
-	}
+	data := h.basePageData(r, title)
 	currencies, err := h.entries.Currencies(r.Context())
 	if err != nil {
 		return entryFormPageData{}, err
@@ -498,8 +460,8 @@ func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool)
 	return entryFormPageData{
 		pageData:    data,
 		KindLabel:   kindLabel(kind),
-		Action:      "/app/" + kindPlural(kind),
-		CancelURL:   "/app/entries?type=" + string(kind),
+		Action:      householdURL(data.ActiveHousehold.ID, "/"+kindPlural(kind)),
+		CancelURL:   entryListURL(data.ActiveHousehold.ID, kind, finance.ScopeMine, "", "", 1),
 		Currencies:  currencies,
 		IsAdmin:     data.ActiveHousehold.IsAdmin(),
 		FieldErrors: make(map[string]string),
@@ -533,7 +495,7 @@ func (h *Handler) renderEntryForm(w http.ResponseWriter, r *http.Request, status
 }
 
 func (h *Handler) redirectEntryList(w http.ResponseWriter, r *http.Request, kind finance.Kind, notice string) {
-	target := entryListURL(kind, finance.ScopeMine, "", "", 1) + "&notice=" + notice
+	target := entryListURL(scopeFromRequest(r).Household.ID, kind, finance.ScopeMine, "", "", 1) + "&notice=" + notice
 	if isHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 		w.WriteHeader(http.StatusNoContent)
@@ -559,7 +521,7 @@ func entryListReturnURL(r *http.Request, kind finance.Kind) string {
 	if err != nil {
 		page = 1
 	}
-	return entryListURL(kind, scope, from, to, page)
+	return entryListURL(scopeFromRequest(r).Household.ID, kind, scope, from, to, page)
 }
 
 func (h *Handler) renderEntryError(w http.ResponseWriter, r *http.Request, err error) {
@@ -588,8 +550,8 @@ func (h *Handler) toEntryRow(entry finance.Entry, actorID uuid.UUID, isAdmin boo
 		KindLabel:   kindLabel(entry.Kind),
 		IsIncome:    entry.Kind == finance.KindIncome,
 		Attribution: attribution,
-		EditURL:     "/app/" + kindPlural(entry.Kind) + "/" + strconv.FormatInt(entry.ID, 10) + "/edit",
-		DeleteURL:   "/app/" + kindPlural(entry.Kind) + "/" + strconv.FormatInt(entry.ID, 10) + "/delete",
+		EditURL:     entryURL(entry.HouseholdID, entry.Kind, entry.ID) + "/edit",
+		DeleteURL:   entryURL(entry.HouseholdID, entry.Kind, entry.ID) + "/delete",
 		CanModify:   finance.NewEntryPolicy(actorID, isAdmin).CanModify(entry),
 	}
 }
@@ -643,7 +605,11 @@ func parsePage(raw string) (int, error) {
 	return value, nil
 }
 
-func entryListURL(kind finance.Kind, scope finance.Scope, from, to string, page int) string {
+func entryURL(id uuid.UUID, kind finance.Kind, entryID int64) string {
+	return householdURL(id, "/"+kindPlural(kind)+"/"+strconv.FormatInt(entryID, 10))
+}
+
+func entryListURL(id uuid.UUID, kind finance.Kind, scope finance.Scope, from, to string, page int) string {
 	values := url.Values{}
 	values.Set("type", string(kind))
 	if scope == finance.ScopeAll {
@@ -658,7 +624,7 @@ func entryListURL(kind finance.Kind, scope finance.Scope, from, to string, page 
 	if page > 1 {
 		values.Set("page", strconv.Itoa(page))
 	}
-	return "/app/entries?" + values.Encode()
+	return householdURL(id, "/entries?"+values.Encode())
 }
 
 func kindLabel(kind finance.Kind) string {

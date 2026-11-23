@@ -1,11 +1,11 @@
 {{define "content"}}
 <section class="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-20">
-  <a href="/app" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to dashboard</a>
+  <a href="{{householdURL .Household.ID "/entries"}}" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to entries</a>
   <p class="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Household settings</p>
   <h1 class="mt-3 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">{{.Household.Name}}</h1>
-  <a href="/app/preferences" class="mt-3 inline-block text-sm font-semibold text-emerald-700 hover:text-emerald-800">Personal currency preferences &rarr;</a>
+  <a href="{{householdURL .Household.ID "/preferences"}}" class="mt-3 inline-block text-sm font-semibold text-emerald-700 hover:text-emerald-800">Personal currency preferences &rarr;</a>
 
-  <form method="post" action="/app/households/{{.Household.ID}}/settings" class="mt-8 space-y-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+  <form method="post" action="{{householdURL .Household.ID "/settings"}}" class="mt-8 space-y-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <div>
       <label for="name" class="block text-sm font-semibold text-stone-800">Household name</label>
@@ -42,7 +42,7 @@
         <input id="invitation_link" type="text" readonly value="{{.}}" class="mt-1 block w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-stone-800">
       </div>
     {{end}}
-    <form method="post" action="/app/households/{{.Household.ID}}/invitations" class="mt-4 space-y-3">
+    <form method="post" action="{{householdURL .Household.ID "/settings/invitations"}}" class="mt-4 space-y-3">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
         <div>
@@ -74,7 +74,7 @@
               <p class="font-medium text-stone-900">{{.Email}}</p>
               <p class="text-sm text-stone-500">{{.Role}} &middot; {{if .Expired}}Expired on {{.ExpiresAt.Format "2 January 2006"}}{{else}}Expires {{.ExpiresAt.Format "2 January 2006"}}{{end}}</p>
             </div>
-            <form method="post" action="/app/households/{{$.Household.ID}}/invitations/{{.ID}}/delete" data-confirm="Revoke this invitation?">
+            <form method="post" action="{{householdURL $.Household.ID (printf "/settings/invitations/%s/delete" .ID)}}" data-confirm="Revoke this invitation?">
               <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
               <button type="submit" class="text-sm font-semibold text-rose-700 hover:text-rose-900">Revoke</button>
             </form>
@@ -84,7 +84,7 @@
     {{end}}
   </div>
 
-  <form method="post" action="/app/households/{{.Household.ID}}/options" class="mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+  <form method="post" action="{{householdURL .Household.ID "/settings/options"}}" class="mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <div>
       <h2 class="text-lg font-semibold text-stone-950">Currency defaults</h2>

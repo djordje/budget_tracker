@@ -181,7 +181,7 @@ func parsePages(fsys fs.FS) (map[string]*template.Template, error) {
 
 		patterns := append([]string{"templates/layout.html"}, partials...)
 		patterns = append(patterns, file)
-		page, err := template.ParseFS(fsys, patterns...)
+		page, err := template.New("layout.html").Funcs(template.FuncMap{"householdURL": householdURL}).ParseFS(fsys, patterns...)
 		if err != nil {
 			return nil, fmt.Errorf("parse template %q: %w", file, err)
 		}

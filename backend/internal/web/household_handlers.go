@@ -43,11 +43,7 @@ type invitationRow struct {
 
 // NewHouseholdPage serves the household creation form.
 func (h *Handler) NewHouseholdPage(w http.ResponseWriter, r *http.Request) {
-	data, ok := h.pageDataOrError(w, r, "New household")
-	if !ok {
-		return
-	}
-	h.render(w, r, "household_new", http.StatusOK, newHouseholdPageData{pageData: data})
+	h.render(w, r, "household_new", http.StatusOK, newHouseholdPageData{pageData: h.basePageData(r, "New household")})
 }
 
 // CreateHousehold creates a household and makes it active.
@@ -58,19 +54,15 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.households.CreateAndActivate(
+	created, err := h.households.CreateAndActivate(
 		r.Context(), session.User.ID, session.TokenHash, r.FormValue("name"),
 	)
 	if err != nil {
 		var validation *households.ValidationError
 		switch {
 		case errors.As(err, &validation):
-			data, ok := h.pageDataOrError(w, r, "New household")
-			if !ok {
-				return
-			}
 			h.render(w, r, "household_new", http.StatusUnprocessableEntity, newHouseholdPageData{
-				pageData:    data,
+				pageData:    h.basePageData(r, "New household"),
 				Name:        r.FormValue("name"),
 				FieldErrors: map[string]string{validation.Field: validation.Message},
 			})
@@ -83,7 +75,7 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/app?notice=household_created", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(created.ID, "/entries?notice=household_created"), http.StatusSeeOther)
 }
 
 // HouseholdSettings serves household settings for admins.
@@ -134,7 +126,7 @@ func (h *Handler) UpdateHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/app/households/"+householdID.String()+"/settings?notice=household_saved", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(householdID, "/settings?notice=household_saved"), http.StatusSeeOther)
 }
 
 // ActivateHousehold changes the session's active household.
@@ -198,7 +190,7 @@ func (h *Handler) UpdateHouseholdOptions(w http.ResponseWriter, r *http.Request)
 		h.renderSettingsError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/app/households/"+householdID.String()+"/settings?notice=options_saved", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(householdID, "/settings?notice=options_saved"), http.StatusSeeOther)
 }
 
 // CreateHouseholdInvitation creates a shareable invitation link.
@@ -277,20 +269,16 @@ func (h *Handler) RevokeHouseholdInvitation(w http.ResponseWriter, r *http.Reque
 		h.renderSettingsError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/app/households/"+householdID.String()+"/settings?notice=invitation_revoked", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(householdID, "/settings?notice=invitation_revoked"), http.StatusSeeOther)
 }
 
 func (h *Handler) settingsData(r *http.Request, householdID uuid.UUID) (householdSettingsPageData, error) {
-	data, err := h.newPageData(r, "Household settings")
+	data := h.basePageData(r, "Household settings")
+	household, err := scopedHousehold(r)
 	if err != nil {
 		return householdSettingsPageData{}, err
 	}
 	session := sessionFromContext(r)
-
-	household := findHousehold(data.Households, householdID)
-	if household == nil {
-		return householdSettingsPageData{}, households.ErrNotFound
-	}
 	if !household.IsAdmin() {
 		return householdSettingsPageData{}, households.ErrForbidden
 	}

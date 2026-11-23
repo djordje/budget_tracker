@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -21,6 +20,8 @@ type pageData struct {
 	Households        []households.Household
 	ActiveHousehold   *households.Household
 	ActiveHouseholdID string
+	Section           string
+	Page              string
 	CSRF              string
 	Notice            string
 }
@@ -42,46 +43,14 @@ func (h *Handler) basePageData(r *http.Request, title string) pageData {
 		data.Authenticated = true
 		data.User = session.User
 	}
-	return data
-}
-
-func (h *Handler) newPageData(r *http.Request, title string) (pageData, error) {
-	data := h.basePageData(r, title)
 	if scope := scopeFromRequest(r); scope.Household != nil {
 		data.Households = scope.Memberships
 		data.ActiveHousehold = scope.Household
 		data.ActiveHouseholdID = scope.Household.ID.String()
-		return data, nil
+		data.Section = scope.Section
+		data.Page = scope.Page
 	}
-	session, ok := auth.FromContext(r.Context())
-	if !ok {
-		return data, nil
-	}
-
-	list, err := h.households.List(r.Context(), session.User.ID)
-	if err != nil {
-		return data, fmt.Errorf("list households: %w", err)
-	}
-	data.Households = list
-
-	if len(list) == 0 {
-		return data, nil
-	}
-
-	for i := range list {
-		if session.ActiveHouseholdID != nil && list[i].ID == *session.ActiveHouseholdID {
-			data.ActiveHousehold = &list[i]
-			data.ActiveHouseholdID = list[i].ID.String()
-			return data, nil
-		}
-	}
-
-	data.ActiveHousehold = &list[0]
-	data.ActiveHouseholdID = list[0].ID.String()
-	if err := h.sessions.SetActiveHousehold(r.Context(), session.TokenHash, session.User.ID, &list[0].ID); err != nil {
-		h.logger.Warn("set default active household", "error", err)
-	}
-	return data, nil
+	return data
 }
 
 func findHousehold(items []households.Household, id uuid.UUID) *households.Household {
@@ -117,8 +86,6 @@ func noticeFromQuery(r *http.Request) string {
 		return "Exchange rate deleted."
 	case "invitation_accepted":
 		return "You joined the household."
-	case "invitation_accepted_household_not_selected":
-		return "You joined the household. Select it from the household menu to make it active."
 	case "invitation_created":
 		return "Invitation created. Share the link with the invited person."
 	case "invitation_revoked":
@@ -130,15 +97,6 @@ func noticeFromQuery(r *http.Request) string {
 	default:
 		return ""
 	}
-}
-
-func (h *Handler) pageDataOrError(w http.ResponseWriter, r *http.Request, title string) (pageData, bool) {
-	data, err := h.newPageData(r, title)
-	if err != nil {
-		h.internalError(w, r, err)
-		return pageData{}, false
-	}
-	return data, true
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, page string, status int, data any) {

@@ -105,13 +105,3 @@ func TestRenderFailuresLogRedactedPath(t *testing.T) {
 	assert.Contains(t, logOutput.String(), "/invitations/[redacted]", "log output")
 	assert.NotContains(t, logOutput.String(), token, "log output leaked an invitation token")
 }
-
-func TestNoticeFromQueryExplainsUnselectedHousehold(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/app?notice=invitation_accepted_household_not_selected", nil)
-
-	assert.Equal(t,
-		"You joined the household. Select it from the household menu to make it active.",
-		noticeFromQuery(request),
-		"notice copy",
-	)
-}

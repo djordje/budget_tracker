@@ -22,15 +22,7 @@ type reportPageData struct {
 
 // ReportsPage serves the household summary report.
 func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
-	data, err := h.newPageData(r, "Reports")
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
+	data := h.basePageData(r, "Reports")
 	session := sessionFromContext(r)
 
 	query := r.URL.Query()

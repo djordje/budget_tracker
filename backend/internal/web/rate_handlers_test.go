@@ -61,12 +61,13 @@ func TestRateFormRendersValidationCopy(t *testing.T) {
 		"rate":               {"1000000000000"},
 		"rate_date":          {"2026-10-15"},
 	}
-	request := httptest.NewRequest(http.MethodPost, "/app/exchange-rates", strings.NewReader(form.Encode()))
+	request := httptest.NewRequest(http.MethodPost, householdURL(householdID, "/exchange-rates"), strings.NewReader(form.Encode()))
+	request.SetPathValue("householdID", householdID.String())
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 	recorder := httptest.NewRecorder()
 	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
-		Load(http.HandlerFunc(handler.CreateExchangeRate)).ServeHTTP(recorder, request)
+		Load(handler.Scoped("more", "", handler.CreateExchangeRate)).ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "Enter a smaller rate.", "rendered validation copy")

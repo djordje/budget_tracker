@@ -31,11 +31,7 @@ type registerPageData struct {
 
 // Home serves the public landing page.
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
-	data, ok := h.pageDataOrError(w, r, "Budget Tracker")
-	if !ok {
-		return
-	}
-	h.render(w, r, "home", http.StatusOK, data)
+	h.render(w, r, "home", http.StatusOK, h.basePageData(r, "Budget Tracker"))
 }
 
 // LoginPage serves the sign-in form.
@@ -195,15 +191,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, safeNextPath(r.FormValue("next"), "/app"), http.StatusSeeOther)
 }
 
-// Dashboard serves the authenticated application home.
-func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	data, ok := h.pageDataOrError(w, r, "Dashboard")
-	if !ok {
-		return
-	}
-	h.render(w, r, "dashboard", http.StatusOK, data)
-}
-
 // Logout revokes the current session and clears the cookie.
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if rawToken := h.cookies.Token(r); rawToken != "" {
@@ -218,12 +205,26 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // RequireAuth redirects anonymous visitors to the sign-in page.
 func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := auth.FromContext(r.Context()); !ok {
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+		if !requireSession(w, r) {
 			return
 		}
 		next(w, r)
 	}
+}
+
+// requireSession reports whether the request carries a session. Anonymous
+// requests are redirected to the sign-in page, and GET and HEAD keep their
+// path so a canonical deep link survives the sign-in round trip.
+func requireSession(w http.ResponseWriter, r *http.Request) bool {
+	if _, ok := auth.FromContext(r.Context()); ok {
+		return true
+	}
+	target := "/login"
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		target += "?" + url.Values{"next": {r.URL.RequestURI()}}.Encode()
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+	return false
 }
 
 func redirectIfAuthenticated(w http.ResponseWriter, r *http.Request) bool {

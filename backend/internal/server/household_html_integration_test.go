@@ -22,7 +22,7 @@ func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uu
 	})
 	body := readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "create household; body:\n%s", body)
-	assert.Contains(t, body, "Household created.", "dashboard does not show creation notice")
+	assert.Contains(t, body, "Household created.", "entries does not show creation notice")
 
 	userID := userIDByEmail(t, client.pool, "ada@example.com")
 	var householdID uuid.UUID
@@ -66,7 +66,7 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 	assert.Contains(t, body, "Household name is required.")
 
 	homeID := createHouseholdHTML(t, client, csrf, "Home")
-	settingsPath := "/app/households/" + homeID.String() + "/settings"
+	settingsPath := "/app/" + homeID.String() + "/settings"
 
 	response, err := client.follow.Get(client.baseURL + settingsPath)
 	require.NoError(t, err, "GET settings")
@@ -114,7 +114,7 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 
 	createHouseholdHTML(t, client, csrf, "Second home")
 	response, err = client.follow.Get(client.baseURL + "/app")
-	require.NoError(t, err, "GET dashboard after second household")
+	require.NoError(t, err, "GET entries after second household")
 	body = readBody(t, response)
 	assert.Contains(t, body, "Second home", "second household was not made active")
 
@@ -124,8 +124,8 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 	})
 	body = readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "switch household; body:\n%s", body)
-	assert.Contains(t, body, ">Shared home</h1>")
-	assert.NotContains(t, body, ">Second home</h1>", "dashboard still shows the previous household")
+	assert.Equal(t, "/app/"+homeID.String()+"/entries", response.Request.URL.Path)
+	assert.Contains(t, body, "Shared home")
 }
 
 func TestHouseholdHTMLRequiresAuth(t *testing.T) {
@@ -134,5 +134,5 @@ func TestHouseholdHTMLRequiresAuth(t *testing.T) {
 	require.NoError(t, err, "GET new household")
 	assert.NoError(t, response.Body.Close(), "close response body")
 	assert.Equal(t, http.StatusSeeOther, response.StatusCode, "GET new household")
-	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
+	assert.Equal(t, "/login?next="+url.QueryEscape("/app/households/new"), response.Header.Get("Location"), "Location")
 }

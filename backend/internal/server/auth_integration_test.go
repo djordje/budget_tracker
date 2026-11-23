@@ -132,15 +132,14 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 	require.NoError(t, err, "GET /app")
 	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusSeeOther, response.StatusCode)
-	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
+	assert.Equal(t, "/login?next="+url.QueryEscape("/app"), response.Header.Get("Location"), "Location")
 
 	csrf := client.csrfToken(t, "/register")
 	response = client.postForm(t, "/register", registerForm(csrf))
 	body := readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "body:\n%s", body)
-	for _, want := range []string{"Welcome, Ada.", "Create household"} {
-		assert.Contains(t, body, want, "dashboard")
-	}
+	assert.Equal(t, "/app/households/new", response.Request.URL.Path)
+	assert.Contains(t, body, "Create household")
 	assert.NotNil(t, client.sessionCookie(t), "registration did not set a session cookie")
 
 	response = client.postForm(t, "/logout", url.Values{"csrf_token": {csrf}})
@@ -153,7 +152,7 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 	require.NoError(t, err, "GET /app after logout")
 	assert.NoError(t, response.Body.Close(), "close response body")
 	require.Equal(t, http.StatusSeeOther, response.StatusCode, "GET /app after logout")
-	assert.Equal(t, "/login", response.Header.Get("Location"), "Location")
+	assert.Equal(t, "/login?next="+url.QueryEscape("/app"), response.Header.Get("Location"), "Location")
 
 	csrf = client.csrfToken(t, "/login")
 	response = client.postForm(t, "/login", url.Values{
@@ -172,7 +171,8 @@ func TestRegisterLoginAndLogoutFlow(t *testing.T) {
 	})
 	body = readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "body:\n%s", body)
-	assert.Contains(t, body, "Welcome, Ada.")
+	assert.Equal(t, "/app/households/new", response.Request.URL.Path)
+	assert.Contains(t, body, "Create household")
 	assert.NotNil(t, client.sessionCookie(t), "login did not set a session cookie")
 }
 

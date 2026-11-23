@@ -29,7 +29,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	admin := newTestClientWithPool(t, pool)
 	adminCSRF := admin.registerHTML(t, "admin@example.com")
 	homeID := createAPIHousehold(t, admin, adminCSRF, "Home")
-	householdBase := "/app/households/" + homeID.String()
+	householdBase := "/app/" + homeID.String()
 	settingsPath := householdBase + "/settings"
 
 	response, err := admin.follow.Get(admin.baseURL + settingsPath)
@@ -38,7 +38,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	require.Contains(t, body, "Invite someone", "settings invite form")
 	require.Contains(t, body, "Currency defaults", "settings currency form")
 
-	response = admin.postForm(t, householdBase+"/invitations", url.Values{
+	response = admin.postForm(t, householdBase+"/settings/invitations", url.Values{
 		"csrf_token": {adminCSRF},
 		"email":      {"invitee@example.com"},
 		"role":       {"member"},
@@ -49,7 +49,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	assert.Contains(t, body, "invitee@example.com", "settings")
 	token := invitationTokenFromBody(t, body)
 
-	response = admin.postForm(t, householdBase+"/invitations", url.Values{
+	response = admin.postForm(t, householdBase+"/settings/invitations", url.Values{
 		"csrf_token": {adminCSRF},
 		"email":      {"invitee@example.com"},
 		"role":       {"member"},
@@ -92,7 +92,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	assert.Contains(t, body, "already been accepted", "accepted page")
 
 	// A mismatched signed-in account cannot accept another invitation.
-	response = admin.postForm(t, householdBase+"/invitations", url.Values{
+	response = admin.postForm(t, householdBase+"/settings/invitations", url.Values{
 		"csrf_token": {adminCSRF},
 		"email":      {"other@example.com"},
 		"role":       {"member"},
@@ -115,7 +115,7 @@ func TestInvitationHTMLFlow(t *testing.T) {
 	).Scan(&invitationID); err != nil {
 		require.NoError(t, err, "look up pending invitation")
 	}
-	response = admin.postForm(t, householdBase+"/invitations/"+invitationID+"/delete", url.Values{"csrf_token": {adminCSRF}})
+	response = admin.postForm(t, householdBase+"/settings/invitations/"+invitationID+"/delete", url.Values{"csrf_token": {adminCSRF}})
 	body = readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "revoke invitation; body:\n%s", body)
 	assert.Contains(t, body, "Invitation revoked.")
@@ -126,9 +126,9 @@ func TestOptionsAndPreferencesHTML(t *testing.T) {
 	admin := newTestClientWithPool(t, pool)
 	adminCSRF := admin.registerHTML(t, "admin@example.com")
 	homeID := createAPIHousehold(t, admin, adminCSRF, "Home")
-	householdBase := "/app/households/" + homeID.String()
+	householdBase := "/app/" + homeID.String()
 
-	response := admin.postForm(t, householdBase+"/options", url.Values{
+	response := admin.postForm(t, householdBase+"/settings/options", url.Values{
 		"csrf_token":                     {adminCSRF},
 		"default_income_currency_code":   {"EUR"},
 		"default_spending_currency_code": {"USD"},
@@ -153,13 +153,13 @@ func TestOptionsAndPreferencesHTML(t *testing.T) {
 	})
 	readBody(t, response)
 
-	response, err := member.follow.Get(member.baseURL + "/app/preferences")
+	response, err := member.follow.Get(member.baseURL + householdBase + "/preferences")
 	require.NoError(t, err, "GET preferences")
 	body = readBody(t, response)
 	assert.Contains(t, body, "Inherit (EUR)", "preferences")
 	assert.Contains(t, body, "Inherit (GBP)", "preferences")
 
-	response = member.postForm(t, "/app/preferences", url.Values{
+	response = member.postForm(t, householdBase+"/preferences", url.Values{
 		"csrf_token":                     {memberCSRF},
 		"default_income_currency_code":   {"RSD"},
 		"default_spending_currency_code": {""},
@@ -169,12 +169,12 @@ func TestOptionsAndPreferencesHTML(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.StatusCode, "save preferences; body:\n%s", body)
 	assert.Contains(t, body, "Preferences saved.")
 
-	response, err = member.follow.Get(member.baseURL + "/app/spendings/new")
+	response, err = member.follow.Get(member.baseURL + householdBase + "/spendings/new")
 	require.NoError(t, err, "GET spending form")
 	body = readBody(t, response)
 	assert.Contains(t, body, `value="USD" selected`, "entry form did not inherit spending default")
 
-	response, err = member.follow.Get(member.baseURL + "/app/reports")
+	response, err = member.follow.Get(member.baseURL + householdBase + "/reports")
 	require.NoError(t, err, "GET reports")
 	body = readBody(t, response)
 	assert.Contains(t, body, `value="EUR" selected`, "report did not use display override")
@@ -185,8 +185,8 @@ func TestInvitationPageGuestFlow(t *testing.T) {
 	admin := newTestClientWithPool(t, pool)
 	adminCSRF := admin.registerHTML(t, "admin@example.com")
 	homeID := createAPIHousehold(t, admin, adminCSRF, "Home")
-	householdBase := "/app/households/" + homeID.String()
-	response := admin.postForm(t, householdBase+"/invitations", url.Values{
+	householdBase := "/app/" + homeID.String()
+	response := admin.postForm(t, householdBase+"/settings/invitations", url.Values{
 		"csrf_token": {adminCSRF}, "email": {"guest@example.com"}, "role": {"member"},
 	})
 	body := readBody(t, response)

@@ -26,8 +26,8 @@
                   </p>
                 </div>
                 <div class="flex items-center gap-3 text-sm">
-                  <a href="/app/exchange-rates/{{.ID}}/edit" class="font-semibold text-stone-600 hover:text-stone-900">Edit</a>
-                  <form method="post" action="/app/exchange-rates/{{.ID}}/delete" data-confirm="Delete this exchange rate?">
+                  <a href="{{householdURL $.ActiveHousehold.ID (printf "/exchange-rates/%d/edit" .ID)}}" class="font-semibold text-stone-600 hover:text-stone-900">Edit</a>
+                  <form method="post" action="{{householdURL $.ActiveHousehold.ID (printf "/exchange-rates/%d/delete" .ID)}}" data-confirm="Delete this exchange rate?">
                     <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
                     <button type="submit" class="font-semibold text-rose-700 hover:text-rose-900">Delete</button>
                   </form>

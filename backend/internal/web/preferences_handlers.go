@@ -43,7 +43,9 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := h.households.SetUserOptions(r.Context(), session.User.ID, data.ActiveHousehold.ID, households.UpdateUserOptionsParams{
+	// preferencesData resolves the URL household, so this is never nil.
+	householdID := data.ActiveHousehold.ID
+	_, err := h.households.SetUserOptions(r.Context(), session.User.ID, householdID, households.UpdateUserOptionsParams{
 		DefaultIncomeCurrencyCode:   optionalFormCurrency(income),
 		DefaultSpendingCurrencyCode: optionalFormCurrency(spending),
 		DefaultDisplayCurrencyCode:  optionalFormCurrency(display),
@@ -58,7 +60,7 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/app/preferences?notice=preferences_saved", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(householdID, "/preferences?notice=preferences_saved"), http.StatusSeeOther)
 }
 
 func (h *Handler) preferencesData(
@@ -67,17 +69,15 @@ func (h *Handler) preferencesData(
 	income, spending, display string,
 	loadExisting bool,
 ) (preferencesPageData, bool) {
-	data, ok := h.pageDataOrError(w, r, "Preferences")
-	if !ok {
-		return preferencesPageData{}, false
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
+	data := h.basePageData(r, "Preferences")
+	household, err := scopedHousehold(r)
+	if err != nil {
+		h.renderPreferencesError(w, r, err)
 		return preferencesPageData{}, false
 	}
 	session := sessionFromContext(r)
 
-	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, data.ActiveHousehold.ID)
+	view, err := h.households.GetOptionsView(r.Context(), session.User.ID, household.ID)
 	if err != nil {
 		h.renderPreferencesError(w, r, err)
 		return preferencesPageData{}, false

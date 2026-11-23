@@ -43,10 +43,6 @@ type rateFormValues struct {
 // ExchangeRatesPage lists rates and shows the add form.
 func (h *Handler) ExchangeRatesPage(w http.ResponseWriter, r *http.Request) {
 	data, err := h.buildRatesPage(r, rateFormValues{}, nil, "")
-	if errors.Is(err, errNoActiveHousehold) {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
 	if err != nil {
 		h.internalError(w, r, err)
 		return
@@ -68,17 +64,8 @@ func (h *Handler) CreateExchangeRate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := sessionFromContext(r)
-	data, err := h.newPageData(r, "Exchange rates")
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
-
-	_, err = h.rates.CreateExchangeRate(r.Context(), finance.CreateExchangeRateParams{
+	data := h.basePageData(r, "Exchange rates")
+	_, err := h.rates.CreateExchangeRate(r.Context(), finance.CreateExchangeRateParams{
 		HouseholdID:      data.ActiveHousehold.ID,
 		ActorID:          session.User.ID,
 		FromCurrencyCode: values.From,
@@ -91,7 +78,7 @@ func (h *Handler) CreateExchangeRate(w http.ResponseWriter, r *http.Request) {
 		h.handleRateFormError(w, r, values, err)
 		return
 	}
-	http.Redirect(w, r, "/app/exchange-rates?notice=rate_created", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(data.ActiveHousehold.ID, "/exchange-rates?notice=rate_created"), http.StatusSeeOther)
 }
 
 // EditExchangeRatePage serves the rate edit form.
@@ -101,24 +88,10 @@ func (h *Handler) EditExchangeRatePage(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Rate not found", "That exchange rate is not available.")
 		return
 	}
-	data, err := h.newPageData(r, "Edit exchange rate")
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
-	if data.ActiveHousehold == nil {
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
-		return
-	}
-	session := sessionFromContext(r)
-	rates, err := h.rates.ListExchangeRates(r.Context(), session.User.ID, data.ActiveHousehold.ID)
+	data := h.basePageData(r, "Edit exchange rate")
+	rate, err := h.scopedRate(r, id)
 	if err != nil {
 		h.renderRateError(w, r, err)
-		return
-	}
-	rate := findRate(rates, id)
-	if rate == nil {
-		h.renderError(w, r, http.StatusNotFound, "Rate not found", "That exchange rate is not available.")
 		return
 	}
 	currencies, err := h.entries.Currencies(r.Context())
@@ -128,8 +101,8 @@ func (h *Handler) EditExchangeRatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "exchange_rate_form", http.StatusOK, exchangeRateFormPageData{
 		pageData:    data,
-		Action:      "/app/exchange-rates/" + strconv.FormatInt(rate.ID, 10),
-		CancelURL:   "/app/exchange-rates",
+		Action:      householdURL(data.ActiveHousehold.ID, "/exchange-rates/"+strconv.FormatInt(rate.ID, 10)),
+		CancelURL:   householdURL(data.ActiveHousehold.ID, "/exchange-rates"),
 		SubmitLabel: "Save rate",
 		FormClass:   "mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6",
 		IsEdit:      true,
@@ -151,6 +124,10 @@ func (h *Handler) UpdateExchangeRate(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+	if _, err := h.scopedRate(r, id); err != nil {
+		h.renderRateError(w, r, err)
 		return
 	}
 	values := rateFormValuesFromRequest(r)
@@ -186,7 +163,7 @@ func (h *Handler) UpdateExchangeRate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, "/app/exchange-rates?notice=rate_updated", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(scopeFromRequest(r).Household.ID, "/exchange-rates?notice=rate_updated"), http.StatusSeeOther)
 }
 
 // DeleteExchangeRate removes a rate from the HTML form.
@@ -196,12 +173,16 @@ func (h *Handler) DeleteExchangeRate(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusNotFound, "Rate not found", "That exchange rate is not available.")
 		return
 	}
+	if _, err := h.scopedRate(r, id); err != nil {
+		h.renderRateError(w, r, err)
+		return
+	}
 	session := sessionFromContext(r)
 	if err := h.rates.DeleteExchangeRate(r.Context(), session.User.ID, id); err != nil {
 		h.renderRateError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/app/exchange-rates?notice=rate_deleted", http.StatusSeeOther)
+	http.Redirect(w, r, householdURL(scopeFromRequest(r).Household.ID, "/exchange-rates?notice=rate_deleted"), http.StatusSeeOther)
 }
 
 func (h *Handler) buildRatesPage(
@@ -210,13 +191,7 @@ func (h *Handler) buildRatesPage(
 	fieldErrors map[string]string,
 	formError string,
 ) (exchangeRatesPageData, error) {
-	data, err := h.newPageData(r, "Exchange rates")
-	if err != nil {
-		return exchangeRatesPageData{}, err
-	}
-	if data.ActiveHousehold == nil {
-		return exchangeRatesPageData{}, errNoActiveHousehold
-	}
+	data := h.basePageData(r, "Exchange rates")
 	session := sessionFromContext(r)
 	rates, err := h.rates.ListExchangeRates(r.Context(), session.User.ID, data.ActiveHousehold.ID)
 	if err != nil {
@@ -241,7 +216,7 @@ func (h *Handler) buildRatesPage(
 		Currencies: currencies,
 		RateForm: exchangeRateFormPageData{
 			pageData:    data,
-			Action:      "/app/exchange-rates",
+			Action:      householdURL(data.ActiveHousehold.ID, "/exchange-rates"),
 			SubmitLabel: "Add rate",
 			FormClass:   "space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm",
 			From:        values.From,
@@ -293,11 +268,7 @@ func (h *Handler) renderRateFormError(
 	fieldErrors map[string]string,
 	formError string,
 ) {
-	data, err := h.newPageData(r, "Edit exchange rate")
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
+	data := h.basePageData(r, "Edit exchange rate")
 	currencies, err := h.entries.Currencies(r.Context())
 	if err != nil {
 		h.internalError(w, r, err)
@@ -308,8 +279,8 @@ func (h *Handler) renderRateFormError(
 	}
 	h.render(w, r, "exchange_rate_form", http.StatusUnprocessableEntity, exchangeRateFormPageData{
 		pageData:    data,
-		Action:      "/app/exchange-rates/" + strconv.FormatInt(id, 10),
-		CancelURL:   "/app/exchange-rates",
+		Action:      householdURL(data.ActiveHousehold.ID, "/exchange-rates/"+strconv.FormatInt(id, 10)),
+		CancelURL:   householdURL(data.ActiveHousehold.ID, "/exchange-rates"),
 		SubmitLabel: "Save rate",
 		FormClass:   "mt-8 space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6",
 		IsEdit:      true,
@@ -351,13 +322,17 @@ func rateFormValuesFromRequest(r *http.Request) rateFormValues {
 	}
 }
 
-func findRate(rates []finance.ExchangeRate, id int64) *finance.ExchangeRate {
-	for i := range rates {
-		if rates[i].ID == id {
-			return &rates[i]
+func (h *Handler) scopedRate(r *http.Request, id int64) (finance.ExchangeRate, error) {
+	rates, err := h.rates.ListExchangeRates(r.Context(), sessionFromContext(r).User.ID, scopeFromRequest(r).Household.ID)
+	if err != nil {
+		return finance.ExchangeRate{}, err
+	}
+	for _, rate := range rates {
+		if rate.ID == id {
+			return rate, nil
 		}
 	}
-	return nil
+	return finance.ExchangeRate{}, finance.ErrNotFound
 }
 
 func defaultRatePair(currencies []finance.Currency) (string, string) {

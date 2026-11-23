@@ -67,7 +67,7 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 		http.HandlerFunc(handler.CreateHousehold))
 
 	require.Equal(t, http.StatusSeeOther, recorder.Code, "body = %s", recorder.Body.String())
-	assert.Equal(t, "/app?notice=household_created", recorder.Header().Get("Location"), "Location")
+	assert.Equal(t, householdURL(household.ID, "/entries?notice=household_created"), recorder.Header().Get("Location"), "Location")
 	assert.Equal(t, 1, called, "CreateAndActivate() calls")
 }
 
@@ -178,12 +178,12 @@ func TestHouseholdSettingsLabelsExpiredInvitations(t *testing.T) {
 		User:              auth.User{ID: userID},
 		ActiveHouseholdID: &household.ID,
 	}
-	request := httptest.NewRequest(http.MethodGet, "/app/households/"+household.ID.String()+"/settings", nil)
+	request := httptest.NewRequest(http.MethodGet, householdURL(household.ID, "/settings"), nil)
 	request.SetPathValue("householdID", household.ID.String())
 	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 	recorder := httptest.NewRecorder()
 	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).
-		Load(http.HandlerFunc(handler.HouseholdSettings)).ServeHTTP(recorder, request)
+		Load(handler.Scoped("more", "settings", handler.HouseholdSettings)).ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
 	body := recorder.Body.String()
