@@ -137,6 +137,31 @@ func TestScopedHTMLKeepsTwoTabsIndependent(t *testing.T) {
 	}
 }
 
+func TestInvalidEnhancedFiltersShowFullPageError(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+	base := "/app/" + createHouseholdHTML(t, client, csrf, "Home").String()
+	for _, page := range []string{"entries", "reports"} {
+		t.Run(page, func(t *testing.T) {
+			path := base + "/" + page + "?from=2026-10-31&to=2026-10-01"
+			request, err := http.NewRequest(http.MethodGet, client.baseURL+path, nil)
+			require.NoError(t, err)
+			request.Header.Set("HX-Request", "true")
+			response, err := client.noRedirect.Do(request)
+			require.NoError(t, err)
+			readBody(t, response)
+			require.Equal(t, http.StatusNoContent, response.StatusCode)
+			assert.Equal(t, path, response.Header.Get("HX-Redirect"))
+
+			response, err = client.noRedirect.Get(client.baseURL + path)
+			require.NoError(t, err)
+			body := readBody(t, response)
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Contains(t, body, `href="`+base+"/"+page+`"`)
+		})
+	}
+}
+
 func TestHouseholdNavigationFollowsMatchedPage(t *testing.T) {
 	client := newTestClient(t)
 	csrf := client.registerHTML(t, "ada@example.com")

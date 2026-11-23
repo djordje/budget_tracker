@@ -162,6 +162,17 @@ func (h *Handler) renderError(w http.ResponseWriter, r *http.Request, status int
 	})
 }
 
+// Invalid filter URLs have a full-page error rather than a swappable list.
+// Make enhanced submissions show that same error instead of silently ignoring it.
+func (h *Handler) renderFilterError(w http.ResponseWriter, r *http.Request, title, message string) {
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", r.URL.RequestURI())
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	h.renderError(w, r, http.StatusBadRequest, title, message)
+}
+
 func (h *Handler) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	h.logger.Error("request failed", "path", logPath(r), "error", err)
 	h.renderError(w, r, http.StatusInternalServerError, "Something went wrong", "Please try again in a moment.")

@@ -1,8 +1,8 @@
 {{define "content"}}
-<section class="mx-auto max-w-lg px-4 py-12 sm:px-6 sm:py-16">
-  <a href="{{.CancelURL}}" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to entries</a>
-  <h1 class="mt-6 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">{{.Title}}</h1>
-  <p class="mt-2 text-stone-600">{{.ActiveHousehold.Name}}</p>
+<section class="mx-auto max-w-lg px-4 py-4 sm:px-6 sm:py-8">
+  <a href="{{.CancelURL}}" class="menu-item -ml-3 inline-flex text-emerald-700 hover:text-emerald-800">&larr; Back to entries</a>
+  <h1 class="page-title mt-2">{{.Title}}</h1>
+  <p class="mt-1 wrap-anywhere text-sm text-stone-600">{{.ActiveHousehold.Name}}</p>
   {{template "entry_form_panel" .}}
 </section>
 {{end}}

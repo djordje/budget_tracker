@@ -18,22 +18,22 @@ const entryDateLayout = "2006-01-02"
 
 type entryListPageData struct {
 	pageData
-	Kind        string
-	KindLabel   string
-	Entries     []entryRow
-	ScopeAll    bool
-	IsAdmin     bool
-	From        string
-	To          string
-	Page        int
-	Total       int
-	TotalPages  int
-	IncomeURL   string
-	SpendingURL string
-	NewURL      string
-	ClearURL    string
-	PreviousURL string
-	NextURL     string
+	Kind           string
+	Entries        []entryRow
+	ScopeAll       bool
+	IsAdmin        bool
+	From           string
+	To             string
+	Page           int
+	Total          int
+	TotalPages     int
+	IncomeURL      string
+	SpendingURL    string
+	NewIncomeURL   string
+	NewSpendingURL string
+	ClearURL       string
+	PreviousURL    string
+	NextURL        string
 }
 
 type entryRow struct {
@@ -89,13 +89,13 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 		kind = finance.KindIncome
 	case "", "spending":
 	default:
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Choose income or spending entries.")
+		h.renderFilterError(w, r, "Bad entry filters", "Choose income or spending entries.")
 		return
 	}
 
 	scope, err := finance.ParseScope(query.Get("scope"))
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Choose my entries or the whole household.")
+		h.renderFilterError(w, r, "Bad entry filters", "Choose my entries or the whole household.")
 		return
 	}
 	if !data.ActiveHousehold.IsAdmin() {
@@ -104,17 +104,17 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 
 	from, err := finance.ParseOptionalDate(query.Get("from"))
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the start date.")
+		h.renderFilterError(w, r, "Bad entry filters", "Use YYYY-MM-DD for the start date.")
 		return
 	}
 	to, err := finance.ParseOptionalDate(query.Get("to"))
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the end date.")
+		h.renderFilterError(w, r, "Bad entry filters", "Use YYYY-MM-DD for the end date.")
 		return
 	}
 	page, err := parsePage(query.Get("page"))
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Page must be a positive number.")
+		h.renderFilterError(w, r, "Bad entry filters", "Page must be a positive number.")
 		return
 	}
 
@@ -129,6 +129,11 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 		PageSize:    20,
 	})
 	if err != nil {
+		var validation *finance.ValidationError
+		if errors.As(err, &validation) {
+			h.renderFilterError(w, r, "Bad entry filters", "Choose a valid date range and page number.")
+			return
+		}
 		h.renderEntryError(w, r, err)
 		return
 	}
@@ -150,21 +155,21 @@ func (h *Handler) Entries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pageData := entryListPageData{
-		pageData:    data,
-		Kind:        string(kind),
-		KindLabel:   kindLabel(kind),
-		Entries:     rows,
-		ScopeAll:    scope == finance.ScopeAll,
-		IsAdmin:     data.ActiveHousehold.IsAdmin(),
-		From:        fromValue,
-		To:          toValue,
-		Page:        result.Page,
-		Total:       result.Total,
-		TotalPages:  result.TotalPages,
-		IncomeURL:   baseURL(finance.KindIncome, 1),
-		SpendingURL: baseURL(finance.KindSpending, 1),
-		NewURL:      householdURL(data.ActiveHousehold.ID, "/"+kindPlural(kind)+"/new"),
-		ClearURL:    entryListURL(data.ActiveHousehold.ID, kind, finance.ScopeMine, "", "", 1),
+		pageData:       data,
+		Kind:           string(kind),
+		Entries:        rows,
+		ScopeAll:       scope == finance.ScopeAll,
+		IsAdmin:        data.ActiveHousehold.IsAdmin(),
+		From:           fromValue,
+		To:             toValue,
+		Page:           result.Page,
+		Total:          result.Total,
+		TotalPages:     result.TotalPages,
+		IncomeURL:      baseURL(finance.KindIncome, 1),
+		SpendingURL:    baseURL(finance.KindSpending, 1),
+		NewIncomeURL:   householdURL(data.ActiveHousehold.ID, "/incomes/new"),
+		NewSpendingURL: householdURL(data.ActiveHousehold.ID, "/spendings/new"),
+		ClearURL:       entryListURL(data.ActiveHousehold.ID, kind, scope, "", "", 1),
 	}
 	if result.Page > 1 {
 		pageData.PreviousURL = baseURL(kind, result.Page-1)
@@ -412,7 +417,7 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request, kind finan
 		h.renderEntryDeleteFailure(w, r, kind, err)
 		return
 	}
-	http.Redirect(w, r, entryListReturnURL(r, kind)+"&notice=entry_deleted", http.StatusSeeOther)
+	redirectToList(w, r, entryListReturnURL(r, kind)+"&notice=entry_deleted")
 }
 
 // renderEntryDeleteFailure reports a failed delete in the format the request
@@ -453,6 +458,10 @@ func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool)
 		title = "Edit " + strings.ToLower(kindLabel(kind))
 	}
 	data := h.basePageData(r, title)
+	household, err := scopedHousehold(r)
+	if err != nil {
+		return entryFormPageData{}, err
+	}
 	currencies, err := h.entries.Currencies(r.Context())
 	if err != nil {
 		return entryFormPageData{}, err
@@ -460,10 +469,10 @@ func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool)
 	return entryFormPageData{
 		pageData:    data,
 		KindLabel:   kindLabel(kind),
-		Action:      householdURL(data.ActiveHousehold.ID, "/"+kindPlural(kind)),
-		CancelURL:   entryListURL(data.ActiveHousehold.ID, kind, finance.ScopeMine, "", "", 1),
+		Action:      householdURL(household.ID, "/"+kindPlural(kind)),
+		CancelURL:   entryListURL(household.ID, kind, finance.ScopeMine, "", "", 1),
 		Currencies:  currencies,
-		IsAdmin:     data.ActiveHousehold.IsAdmin(),
+		IsAdmin:     household.IsAdmin(),
 		FieldErrors: make(map[string]string),
 	}, nil
 }
@@ -495,7 +504,13 @@ func (h *Handler) renderEntryForm(w http.ResponseWriter, r *http.Request, status
 }
 
 func (h *Handler) redirectEntryList(w http.ResponseWriter, r *http.Request, kind finance.Kind, notice string) {
-	target := entryListURL(scopeFromRequest(r).Household.ID, kind, finance.ScopeMine, "", "", 1) + "&notice=" + notice
+	redirectToList(w, r, entryListURL(scopeFromRequest(r).Household.ID, kind, finance.ScopeMine, "", "", 1)+"&notice="+notice)
+}
+
+// redirectToList navigates to target. HTMX callers get HX-Redirect so they
+// follow it as a full page load: swapping only the list would leave the layout
+// notices, which sit outside the swapped region, unrendered.
+func redirectToList(w http.ResponseWriter, r *http.Request, target string) {
 	if isHTMX(r) {
 		w.Header().Set("HX-Redirect", target)
 		w.WriteHeader(http.StatusNoContent)

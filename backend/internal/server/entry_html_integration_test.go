@@ -37,7 +37,9 @@ func TestEntryHTMLFlow(t *testing.T) {
 	require.NoError(t, err, "GET entries")
 	body := readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "empty entries; body:\n%s", body)
-	assert.Contains(t, body, "No Spending entries yet")
+	assert.Contains(t, body, "No spending entries yet")
+	assert.Contains(t, body, `href="`+base+`/spendings/new"`)
+	assert.Contains(t, body, `href="`+base+`/incomes/new"`)
 
 	response, err = client.follow.Get(client.baseURL + base + "/spendings/new")
 	require.NoError(t, err, "GET spending form")
@@ -233,6 +235,19 @@ func TestEntryHTMLPaginationAndFilters(t *testing.T) {
 	body = readBody(t, response)
 	assert.Contains(t, body, "Bulk 00", "date filter")
 	assert.NotContains(t, body, "Bulk 01", "date filter did not isolate one entry")
+
+	response, err = client.follow.Get(client.baseURL + base + "/entries?type=spending&from=2026-10-01")
+	require.NoError(t, err, "GET empty filtered entries")
+	body = readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Contains(t, body, "No entries match these dates")
+
+	// Clearing the dates keeps the whole-household scope the admin selected.
+	response, err = client.follow.Get(client.baseURL + base + "/entries?type=spending&scope=all")
+	require.NoError(t, err, "GET all-scope entries")
+	body = readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Contains(t, body, `href="`+base+`/entries?scope=all&amp;type=spending" hx-get`, "clear keeps scope")
 }
 
 func (c *testClient) postFormHTMXNoRedirect(t *testing.T, path string, values url.Values) *http.Response {
@@ -307,8 +322,8 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 		"return_page": {"1"},
 	})
 	assert.NoError(t, response.Body.Close(), "close response body")
-	require.Equal(t, http.StatusSeeOther, response.StatusCode, "HTMX delete")
-	redirect = response.Header.Get("Location")
+	require.Equal(t, http.StatusNoContent, response.StatusCode, "HTMX delete")
+	redirect = response.Header.Get("HX-Redirect")
 	assert.Contains(t, redirect, "notice=entry_deleted", "delete Location")
 	assert.Contains(t, redirect, "type=spending", "delete Location")
 

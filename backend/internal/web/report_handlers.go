@@ -38,18 +38,18 @@ func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	from, err := time.Parse(entryDateLayout, fromValue)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the start date.")
+		h.renderFilterError(w, r, "Bad report filters", "Use YYYY-MM-DD for the start date.")
 		return
 	}
 	to, err := time.Parse(entryDateLayout, toValue)
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Use YYYY-MM-DD for the end date.")
+		h.renderFilterError(w, r, "Bad report filters", "Use YYYY-MM-DD for the end date.")
 		return
 	}
 
 	scope, err := finance.ParseScope(query.Get("scope"))
 	if err != nil {
-		h.renderError(w, r, http.StatusBadRequest, "Bad request", "Choose my data or the whole household.")
+		h.renderFilterError(w, r, "Bad report filters", "Choose my data or the whole household.")
 		return
 	}
 	if !data.ActiveHousehold.IsAdmin() {
@@ -82,7 +82,7 @@ func (h *Handler) ReportsPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var validation *finance.ValidationError
 		if errors.As(err, &validation) {
-			h.renderError(w, r, http.StatusBadRequest, "Bad report filters", "Choose a valid date range and display currency.")
+			h.renderFilterError(w, r, "Bad report filters", "Choose a valid date range and display currency.")
 			return
 		}
 		h.renderReportError(w, r, err)

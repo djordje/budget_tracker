@@ -3,7 +3,7 @@
   <a href="{{householdURL .ActiveHousehold.ID "/entries"}}" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to entries</a>
   <p class="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Preferences</p>
   <h1 class="mt-3 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">Currency defaults</h1>
-  <p class="mt-2 text-stone-600">{{.ActiveHousehold.Name}}</p>
+  <p class="mt-2 wrap-anywhere text-stone-600">{{.ActiveHousehold.Name}}</p>
   <p class="mt-3 text-sm leading-6 text-stone-500">
     Leave a field on "Inherit" to use the household default. Personal overrides apply only in this household.
   </p>
@@ -18,7 +18,7 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <div>
       <label for="default_income_currency_code" class="block text-sm font-semibold text-stone-800">Income currency</label>
-      <select id="default_income_currency_code" name="default_income_currency_code" class="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 shadow-sm">
+      <select id="default_income_currency_code" name="default_income_currency_code" class="field-select">
         <option value="" {{if eq .IncomeOverride ""}}selected{{end}}>Inherit ({{.HouseholdOptions.DefaultIncomeCurrencyCode}})</option>
         {{range .Currencies}}<option value="{{.Code}}" {{if eq .Code $.IncomeOverride}}selected{{end}}>{{.Code}} &mdash; {{.Name}}</option>{{end}}
       </select>
@@ -26,7 +26,7 @@
     </div>
     <div>
       <label for="default_spending_currency_code" class="block text-sm font-semibold text-stone-800">Spending currency</label>
-      <select id="default_spending_currency_code" name="default_spending_currency_code" class="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 shadow-sm">
+      <select id="default_spending_currency_code" name="default_spending_currency_code" class="field-select">
         <option value="" {{if eq .SpendingOverride ""}}selected{{end}}>Inherit ({{.HouseholdOptions.DefaultSpendingCurrencyCode}})</option>
         {{range .Currencies}}<option value="{{.Code}}" {{if eq .Code $.SpendingOverride}}selected{{end}}>{{.Code}} &mdash; {{.Name}}</option>{{end}}
       </select>
@@ -34,15 +34,13 @@
     </div>
     <div>
       <label for="default_display_currency_code" class="block text-sm font-semibold text-stone-800">Report display currency</label>
-      <select id="default_display_currency_code" name="default_display_currency_code" class="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 shadow-sm">
+      <select id="default_display_currency_code" name="default_display_currency_code" class="field-select">
         <option value="" {{if eq .DisplayOverride ""}}selected{{end}}>Inherit ({{.HouseholdOptions.DefaultDisplayCurrencyCode}})</option>
         {{range .Currencies}}<option value="{{.Code}}" {{if eq .Code $.DisplayOverride}}selected{{end}}>{{.Code}} &mdash; {{.Name}}</option>{{end}}
       </select>
       {{with index .FieldErrors "default_display_currency_code"}}<p class="mt-1 text-sm text-red-700">{{.}}</p>{{end}}
     </div>
-    <button type="submit" class="w-full rounded-xl bg-emerald-700 px-4 py-2.5 font-semibold text-white shadow-sm hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
-      Save preferences
-    </button>
+    <button type="submit" class="btn-primary w-full">Save preferences</button>
   </form>
 </section>
 {{end}}

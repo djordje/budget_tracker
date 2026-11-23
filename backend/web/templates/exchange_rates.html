@@ -3,7 +3,7 @@
   <div class="max-w-2xl">
     <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Household</p>
     <h1 class="mt-3 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">Exchange rates</h1>
-    <p class="mt-2 text-stone-600">{{.ActiveHousehold.Name}}</p>
+    <p class="mt-2 wrap-anywhere text-stone-600">{{.ActiveHousehold.Name}}</p>
     <p class="mt-3 text-sm leading-6 text-stone-500">
       Exact-date rates apply only on their date. Monthly rates apply across the whole calendar month.
       Rates only convert directly between the chosen pair or by their inverse.
@@ -25,11 +25,11 @@
                     {{if .IsMonthly}}Monthly &middot; {{.RateDate.Format "January 2006"}}{{else}}{{.RateDate.Format "2 January 2006"}}{{end}}
                   </p>
                 </div>
-                <div class="flex items-center gap-3 text-sm">
-                  <a href="{{householdURL $.ActiveHousehold.ID (printf "/exchange-rates/%d/edit" .ID)}}" class="font-semibold text-stone-600 hover:text-stone-900">Edit</a>
+                <div class="flex items-center gap-1 text-sm">
+                  <a href="{{householdURL $.ActiveHousehold.ID (printf "/exchange-rates/%d/edit" .ID)}}" class="menu-item min-w-11 justify-center px-2 text-stone-600">Edit</a>
                   <form method="post" action="{{householdURL $.ActiveHousehold.ID (printf "/exchange-rates/%d/delete" .ID)}}" data-confirm="Delete this exchange rate?">
                     <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
-                    <button type="submit" class="font-semibold text-rose-700 hover:text-rose-900">Delete</button>
+                    <button type="submit" class="menu-item min-w-11 justify-center px-2 text-rose-700 hover:text-rose-900">Delete</button>
                   </form>
                 </div>
               </li>
