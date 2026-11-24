@@ -2,6 +2,7 @@
 go = "1.27.3"
 golangci-lint = "2.15.0"
 node = "24.14.0"
+"go:github.com/gohugoio/gotmplfmt" = "0.5.0"
 
 [env]
 # Local overrides live in .env, which is ignored by git. Missing files are fine.
@@ -57,6 +58,21 @@ files=$(gofmt -l .)
 if [ -n "$files" ]; then
   echo "Go files need formatting:" >&2
   echo "$files" >&2
+  exit 1
+fi
+"""
+
+[tasks."format:html"]
+description = "Format Go HTML templates"
+run = "cd backend && gotmplfmt -w web/templates/*.html"
+
+[tasks."format:html:check"]
+description = "Verify Go HTML templates are formatted"
+run = """
+cd backend || exit 1
+files=$(gotmplfmt -l web/templates/*.html) || exit $?
+if [ -n "$files" ]; then
+  printf 'HTML templates need formatting (run mise run format:html):\\n%s\\n' "$files" >&2
   exit 1
 fi
 """
@@ -120,6 +136,7 @@ run = "cd backend && TEST_DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://budget@
 description = "Run formatting, linting, tests, and a build"
 run = [
   "mise run format:check",
+  "mise run format:html:check",
   "mise run lint",
   "mise run test",
   "mise run build",
@@ -129,6 +146,7 @@ run = [
 description = "Run all checks, including PostgreSQL integration tests"
 run = [
   "mise run format:check",
+  "mise run format:html:check",
   "mise run lint",
   "mise run test",
   "mise run test:integration",

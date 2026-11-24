@@ -1,64 +1,64 @@
-{{define "entry_form_panel"}}
-<form id="entry-form" method="post" action="{{.Action}}" hx-disabled-elt="find button[type='submit']" hx-post="{{.Action}}" hx-target="#entry-form" hx-swap="outerHTML" class="mt-4 space-y-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-6">
-  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+{{ define "entry_form_panel" }}
+<form id="entry-form" method="post" action="{{ .Action }}" hx-disabled-elt="find button[type='submit']" hx-post="{{ .Action }}" hx-target="#entry-form" hx-swap="outerHTML" class="mt-4 space-y-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-6">
+	<input type="hidden" name="csrf_token" value="{{ .CSRF }}">
 
-  {{with .FormError}}
-    <div role="alert" class="alert-error">{{.}}</div>
-  {{end}}
+	{{ with .FormError }}
+		<div role="alert" class="alert-error">{{ . }}</div>
+	{{ end }}
 
-  <div>
-    <label for="amount" class="field-label">Amount</label>
-    <input id="amount" name="amount" type="text" inputmode="decimal" value="{{.Amount}}" required autocomplete="off" {{with index .FieldErrors "amount"}}aria-invalid="true" aria-describedby="amount-error"{{end}} class="field-input">
-    {{with index .FieldErrors "amount"}}<p id="amount-error" class="field-error">{{.}}</p>{{end}}
-  </div>
+	<div>
+		<label for="amount" class="field-label">Amount</label>
+		<input id="amount" name="amount" type="text" inputmode="decimal" value="{{ .Amount }}" required autocomplete="off" {{ with index .FieldErrors "amount" }}aria-invalid="true" aria-describedby="amount-error"{{ end }} class="field-input">
+		{{ with index .FieldErrors "amount" }}<p id="amount-error" class="field-error">{{ . }}</p>{{ end }}
+	</div>
 
-  <div class="grid gap-4 sm:grid-cols-2">
-    <div class="min-w-0">
-      <label for="currency_code" class="field-label">Currency</label>
-      <select id="currency_code" name="currency_code" required {{with index .FieldErrors "currency_code"}}aria-invalid="true" aria-describedby="currency-code-error"{{end}} class="field-select">
-        {{range .Currencies}}
-          <option value="{{.Code}}" {{if eq .Code $.CurrencyCode}}selected{{end}}>{{.Code}} &mdash; {{.Name}}</option>
-        {{end}}
-      </select>
-      {{with index .FieldErrors "currency_code"}}<p id="currency-code-error" class="field-error">{{.}}</p>{{end}}
-    </div>
-    <div class="min-w-0">
-      <label for="entry_date" class="field-label">Date</label>
-      <input id="entry_date" name="entry_date" type="date" value="{{.EntryDate}}" required {{with index .FieldErrors "entry_date"}}aria-invalid="true" aria-describedby="entry-date-error"{{end}} class="field-input">
-      {{with index .FieldErrors "entry_date"}}<p id="entry-date-error" class="field-error">{{.}}</p>{{end}}
-    </div>
-  </div>
+	<div class="grid gap-4 sm:grid-cols-2">
+		<div class="min-w-0">
+			<label for="currency_code" class="field-label">Currency</label>
+			<select id="currency_code" name="currency_code" required {{ with index .FieldErrors "currency_code" }}aria-invalid="true" aria-describedby="currency-code-error"{{ end }} class="field-select">
+				{{ range .Currencies }}
+					<option value="{{ .Code }}" {{ if eq .Code $.CurrencyCode }}selected{{ end }}>{{ .Code }} &mdash; {{ .Name }}</option>
+				{{ end }}
+			</select>
+			{{ with index .FieldErrors "currency_code" }}<p id="currency-code-error" class="field-error">{{ . }}</p>{{ end }}
+		</div>
+		<div class="min-w-0">
+			<label for="entry_date" class="field-label">Date</label>
+			<input id="entry_date" name="entry_date" type="date" value="{{ .EntryDate }}" required {{ with index .FieldErrors "entry_date" }}aria-invalid="true" aria-describedby="entry-date-error"{{ end }} class="field-input">
+			{{ with index .FieldErrors "entry_date" }}<p id="entry-date-error" class="field-error">{{ . }}</p>{{ end }}
+		</div>
+	</div>
 
-  <div>
-    <label for="description" class="field-label">Description <span class="font-normal text-stone-500">(optional)</span></label>
-    <textarea id="description" name="description" rows="2" maxlength="500" {{with index .FieldErrors "description"}}aria-invalid="true" aria-describedby="description-error"{{end}} class="field-input">{{.Description}}</textarea>
-    {{with index .FieldErrors "description"}}<p id="description-error" class="field-error">{{.}}</p>{{end}}
-  </div>
+	<div>
+		<label for="description" class="field-label">Description <span class="font-normal text-stone-500">(optional)</span></label>
+		<textarea id="description" name="description" rows="2" maxlength="500" {{ with index .FieldErrors "description" }}aria-invalid="true" aria-describedby="description-error"{{ end }} class="field-input">{{ .Description }}</textarea>
+		{{ with index .FieldErrors "description" }}<p id="description-error" class="field-error">{{ . }}</p>{{ end }}
+	</div>
 
-  {{if .ShowAttributionChoice}}
-    <fieldset>
-      <legend class="field-label">Attribution</legend>
-      <div class="mt-1 grid gap-x-3 rounded-xl border border-stone-200 px-3 sm:grid-cols-2">
-        <label class="flex min-h-11 items-center gap-2 text-sm text-stone-700">
-          <input type="radio" name="attribution" value="self" {{if not .HouseholdWide}}checked{{end}} class="size-4 text-emerald-700 focus:ring-emerald-600">
-          My entry
-        </label>
-        <label class="flex min-h-11 items-center gap-2 text-sm text-stone-700">
-          <input type="radio" name="attribution" value="household" {{if .HouseholdWide}}checked{{end}} class="size-4 text-emerald-700 focus:ring-emerald-600">
-          Whole household
-        </label>
-      </div>
-      {{with index .FieldErrors "attribution"}}<p class="field-error">{{.}}</p>{{end}}
-    </fieldset>
-  {{else}}
-    <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-600">
-      {{if .HouseholdWide}}Household-wide entry{{else}}Your entry{{end}}
-    </div>
-  {{end}}
+	{{ if .ShowAttributionChoice }}
+		<fieldset>
+			<legend class="field-label">Attribution</legend>
+			<div class="mt-1 grid gap-x-3 rounded-xl border border-stone-200 px-3 sm:grid-cols-2">
+				<label class="flex min-h-11 items-center gap-2 text-sm text-stone-700">
+					<input type="radio" name="attribution" value="self" {{ if not .HouseholdWide }}checked{{ end }} class="size-4 text-emerald-700 focus:ring-emerald-600">
+					My entry
+				</label>
+				<label class="flex min-h-11 items-center gap-2 text-sm text-stone-700">
+					<input type="radio" name="attribution" value="household" {{ if .HouseholdWide }}checked{{ end }} class="size-4 text-emerald-700 focus:ring-emerald-600">
+					Whole household
+				</label>
+			</div>
+			{{ with index .FieldErrors "attribution" }}<p class="field-error">{{ . }}</p>{{ end }}
+		</fieldset>
+	{{ else }}
+		<div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-600">
+			{{ if .HouseholdWide }}Household-wide entry{{ else }}Your entry{{ end }}
+		</div>
+	{{ end }}
 
-  <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-    <button type="submit" class="btn-primary min-h-11">Save {{.KindLabel}}</button>
-    <a href="{{.CancelURL}}" class="btn-secondary min-h-11">Cancel</a>
-  </div>
+	<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+		<button type="submit" class="btn-primary min-h-11">Save {{ .KindLabel }}</button>
+		<a href="{{ .CancelURL }}" class="btn-secondary min-h-11">Cancel</a>
+	</div>
 </form>
-{{end}}
+{{ end }}

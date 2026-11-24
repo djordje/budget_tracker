@@ -1,4 +1,4 @@
-Status: In progress
+Status: Complete
 
 # Deterministic HTML template formatting
 
@@ -9,7 +9,7 @@ In [`backend/web/templates/entries.html`](../../backend/web/templates/entries.ht
 ## Scope and constraints
 
 - Format all tracked `.html` files under `backend/web/templates/`, including shared partials. These are Go `html/template` sources, not standalone HTML documents.
-- Prefer two-space indentation, matching the current templates. Run the same pinned tool and checked-in configuration locally and in CI.
+- Use the chosen formatter's tab indentation. Run the same pinned tool locally and in CI.
 - Preserve template behavior and rendered output, except for reviewed, insignificant whitespace between elements. In particular, keep visible inline spacing, textarea values, attribute values, and the HTMX swap boundary unchanged.
 - Do not sort Tailwind classes, reorder attributes, change template logic, redesign markup, format generated assets, or add a runtime dependency. Keep the existing Go formatting tasks unchanged.
 
@@ -26,7 +26,9 @@ In [`backend/web/templates/entries.html`](../../backend/web/templates/entries.ht
 - Compare representative before/after renders for populated and empty entries, scoped filters, HTMX responses, and a nonempty entry description. Review inline text, options and conditional attributes in both branches, and exact textarea contents; do not globally normalize whitespace in this comparison.
 - Run `mise run check:all` with local PostgreSQL to cover template parsing, HTML/HTMX behavior, linting, and the build. Record the selected tool, any exceptions, and validation results here before marking the plan complete.
 
-## Open questions
+## Implementation and validation record
 
-- Which maintained formatter passes the full-template trial without source workarounds?
-- Can the default wrapping and whitespace settings keep the baseline diff focused, or should the project pin additional options? Decide from the trial diff rather than making unrelated style changes.
+- Selected `github.com/gohugoio/gotmplfmt` v0.5.0 after testing all 18 templates. Its built-in style uses tabs, normalizes Go action spacing, and does not reflow long tags. No formatter options, ignore directives, or source workarounds are needed. The Prettier 3.10.1 trial with `prettier-plugin-go-template` 0.0.15 added a newline before the description and was not idempotent with either default or strict HTML whitespace settings. djLint 1.36.4 was idempotent but lost the outer section indentation after the multiline Go comment in `entries.html` and reflowed considerably more markup.
+- Pinned `gotmplfmt` in [`mise.toml`](../../mise.toml), added the two HTML formatting tasks, and enabled the check in both aggregate tasks with the formatted baseline. The tool is installed by `mise install`, not added to the application module or npm dependencies.
+- Compared scratch before/after renders of populated entries, both empty states, both scope selections, the HTMX error fragment, the entry form with a multiline description, and an action fixture with whitespace trimming. Tags, attributes, and text matched apart from indentation after newlines outside the textarea; the raw textarea content matched exactly. The live region still wraps the normal swap target and is absent from the error fragment.
+- Verified `mise run deps`, the scratch drift/non-mutation check, and byte-for-byte idempotence after reformatting. `mise run check` and `mise run check:all` passed; the latter ran with local PostgreSQL, including both lint modes, unit and integration tests, and the build.

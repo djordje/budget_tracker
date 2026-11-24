@@ -44,4 +44,4 @@ Rules:
 | 2026-11-14 | [Backend Review Remediation](./20261114_192841_backend_review_remediation.md) | Complete |
 | 2026-11-15 | [Backend Review Remediation Follow-ups](./20261115_170736_backend_review_remediation_followups.md) | Complete |
 | 2026-11-22 | [Mobile-first UI and household URLs](./20261122_190603_mobile_first_ui.md) | Complete |
-| 2026-11-24 | [Deterministic HTML template formatting](./20261124_083844_html_template_formatting.md) | In progress |
+| 2026-11-24 | [Deterministic HTML template formatting](./20261124_083844_html_template_formatting.md) | Complete |

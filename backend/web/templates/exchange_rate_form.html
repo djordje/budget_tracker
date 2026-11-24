@@ -1,9 +1,9 @@
-{{define "content"}}
+{{ define "content" }}
 <section class="mx-auto max-w-lg px-4 py-12 sm:px-6 sm:py-16">
-  <a href="{{.CancelURL}}" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to exchange rates</a>
-  <h1 class="mt-6 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">Edit exchange rate</h1>
-  <p class="mt-2 wrap-anywhere text-stone-600">{{.ActiveHousehold.Name}}</p>
+	<a href="{{ .CancelURL }}" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">&larr; Back to exchange rates</a>
+	<h1 class="mt-6 text-3xl font-bold tracking-tight text-stone-950 sm:text-4xl">Edit exchange rate</h1>
+	<p class="mt-2 wrap-anywhere text-stone-600">{{ .ActiveHousehold.Name }}</p>
 
-  {{template "rate_form" .}}
+	{{ template "rate_form" . }}
 </section>
-{{end}}
+{{ end }}

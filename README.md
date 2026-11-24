@@ -34,19 +34,26 @@ served at `/healthz` (liveness) and `/readyz` (database readiness).
 Other development tasks:
 
 ```sh
-mise run format       # format Go source
-mise run lint         # run go vet
-mise run test         # run unit tests
-mise run build        # build bin/budget-tracker
-mise run dev          # run the development server
-mise run css:build    # compile Tailwind CSS
-mise run assets:build # compile CSS and copy HTMX
-mise run css:watch    # rebuild CSS while editing templates
-mise run db:status    # show applied and pending migrations
-mise run db:down      # stop local PostgreSQL
+mise run format            # format Go source
+mise run format:html       # format Go HTML templates
+mise run format:html:check # check template formatting without writing
+mise run lint              # run static analysis
+mise run test              # run unit tests
+mise run build             # build bin/budget-tracker
+mise run dev               # run the development server
+mise run css:build         # compile Tailwind CSS
+mise run assets:build      # compile CSS and copy HTMX
+mise run css:watch         # rebuild CSS while editing templates
+mise run db:status         # show applied and pending migrations
+mise run db:down           # stop local PostgreSQL
 ```
 
-`check` runs the formatting check, linting, unit tests, and a build together:
+`mise install` installs the pinned `gotmplfmt` tool. It formats the Go
+`html/template` sources in `backend/web/templates/` using tabs, without an
+editor plugin or formatting options.
+
+`check` runs the Go and HTML formatting checks, linting, unit tests, and a
+build together:
 
 ```sh
 mise run check

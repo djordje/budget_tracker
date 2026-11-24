@@ -1,124 +1,124 @@
-{{define "content"}}
+{{ define "content" }}
 <section class="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <h1 class="page-title">Entries</h1>
-    <div class="grid grid-cols-2 gap-2 text-center text-sm sm:text-base">
-      <a href="{{.NewSpendingURL}}" class="btn-primary min-h-11 px-2 sm:px-5">Add spending</a>
-      <a href="{{.NewIncomeURL}}" class="btn-secondary min-h-11 px-2 sm:px-4">Add income</a>
-    </div>
-  </div>
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<h1 class="page-title">Entries</h1>
+		<div class="grid grid-cols-2 gap-2 text-center text-sm sm:text-base">
+			<a href="{{ .NewSpendingURL }}" class="btn-primary min-h-11 px-2 sm:px-5">Add spending</a>
+			<a href="{{ .NewIncomeURL }}" class="btn-secondary min-h-11 px-2 sm:px-4">Add income</a>
+		</div>
+	</div>
 
-  {{/* The live region stays put: HTMX replaces #entries-content itself, and an
+	{{/* The live region stays put: HTMX replaces #entries-content itself, and an
        aria-live node that is swapped out is never announced. */}}
-  <div aria-live="polite">
-  <div id="entries-content">
-  <nav class="mt-4 flex gap-1 border-b border-stone-200" aria-label="Entry type">
-    <a href="{{.SpendingURL}}"{{if eq .Kind "spending"}} aria-current="true"{{end}}
-       hx-get="{{.SpendingURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
-       class="menu-item {{if eq .Kind "spending"}}menu-active{{end}}">Spending</a>
-    <a href="{{.IncomeURL}}"{{if eq .Kind "income"}} aria-current="true"{{end}}
-       hx-get="{{.IncomeURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
-       class="menu-item {{if eq .Kind "income"}}menu-active{{end}}">Income</a>
-  </nav>
+	<div aria-live="polite">
+		<div id="entries-content">
+			<nav class="mt-4 flex gap-1 border-b border-stone-200" aria-label="Entry type">
+				<a href="{{ .SpendingURL }}"{{ if eq .Kind "spending" }} aria-current="true"{{ end }}
+					hx-get="{{ .SpendingURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
+					class="menu-item {{ if eq .Kind "spending" }}menu-active{{ end }}">Spending</a>
+				<a href="{{ .IncomeURL }}"{{ if eq .Kind "income" }} aria-current="true"{{ end }}
+					hx-get="{{ .IncomeURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true"
+					class="menu-item {{ if eq .Kind "income" }}menu-active{{ end }}">Income</a>
+			</nav>
 
-  <form method="get" action="{{householdURL .ActiveHousehold.ID "/entries"}}" hx-disabled-elt="find button[type='submit']" hx-get="{{householdURL .ActiveHousehold.ID "/entries"}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="mt-4 grid grid-cols-2 gap-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end">
-    <input type="hidden" name="type" value="{{.Kind}}">
-    {{if .IsAdmin}}
-      <div class="col-span-2 min-w-0 md:col-auto">
-        <label for="scope" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">View</label>
-        <select id="scope" name="scope" class="field-select">
-          <option value="mine" {{if not .ScopeAll}}selected{{end}}>My entries</option>
-          <option value="all" {{if .ScopeAll}}selected{{end}}>Whole household</option>
-        </select>
-      </div>
-    {{end}}
-    <div class="min-w-0">
-      <label for="from" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">From</label>
-      <input id="from" name="from" type="date" value="{{.From}}" class="filter-date">
-    </div>
-    <div class="min-w-0">
-      <label for="to" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">To</label>
-      <input id="to" name="to" type="date" value="{{.To}}" class="filter-date">
-    </div>
-    <button type="submit" class="min-h-11 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2">
-      Filter
-    </button>
-    <a href="{{.ClearURL}}" hx-get="{{.ClearURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="menu-item justify-center">Clear</a>
-  </form>
+			<form method="get" action="{{ householdURL .ActiveHousehold.ID "/entries" }}" hx-disabled-elt="find button[type='submit']" hx-get="{{ householdURL .ActiveHousehold.ID "/entries" }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="mt-4 grid grid-cols-2 gap-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end">
+				<input type="hidden" name="type" value="{{ .Kind }}">
+				{{ if .IsAdmin }}
+					<div class="col-span-2 min-w-0 md:col-auto">
+						<label for="scope" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">View</label>
+						<select id="scope" name="scope" class="field-select">
+							<option value="mine" {{ if not .ScopeAll }}selected{{ end }}>My entries</option>
+							<option value="all" {{ if .ScopeAll }}selected{{ end }}>Whole household</option>
+						</select>
+					</div>
+				{{ end }}
+				<div class="min-w-0">
+					<label for="from" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">From</label>
+					<input id="from" name="from" type="date" value="{{ .From }}" class="filter-date">
+				</div>
+				<div class="min-w-0">
+					<label for="to" class="block text-xs font-semibold uppercase tracking-wide text-stone-500">To</label>
+					<input id="to" name="to" type="date" value="{{ .To }}" class="filter-date">
+				</div>
+				<button type="submit" class="min-h-11 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2">
+					Filter
+				</button>
+				<a href="{{ .ClearURL }}" hx-get="{{ .ClearURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="menu-item justify-center">Clear</a>
+			</form>
 
-  {{if .Entries}}
-    <div class="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <ul class="divide-y divide-stone-100">
-        {{range .Entries}}
-          <li class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-2.5 sm:px-5">
-            <div class="min-w-0">
-              <p class="font-medium wrap-anywhere text-stone-900">
-                {{with .Entry.Description}}{{.}}{{else}}<span class="text-stone-500">{{.KindLabel}}</span>{{end}}
-              </p>
-              <p class="mt-0.5 text-xs wrap-anywhere text-stone-600 sm:text-sm">
-                <time datetime="{{.Entry.DateString}}">{{.Entry.DateString}}</time> &middot; {{.Attribution}}
-              </p>
-            </div>
-            <div class="flex min-w-0 flex-col items-end">
-              <p class="max-w-[9rem] text-right font-semibold wrap-anywhere tabular-nums sm:max-w-none sm:text-lg {{if .IsIncome}}text-emerald-700{{else}}text-rose-700{{end}}">
-                {{if .IsIncome}}+{{else}}-{{end}}{{.Entry.DisplayAmount}} {{.Entry.CurrencyCode}}
-              </p>
-              {{if .CanModify}}
-                <div class="flex items-center gap-1 text-sm">
-                  <a href="{{.EditURL}}" class="menu-item min-w-11 justify-center px-2">Edit</a>
-                  <form method="post" action="{{.DeleteURL}}" hx-disabled-elt="find button" hx-post="{{.DeleteURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" data-confirm="Delete this entry?">
-                    <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
-                    <input type="hidden" name="return_scope" value="{{if $.ScopeAll}}all{{end}}">
-                    <input type="hidden" name="return_from" value="{{$.From}}">
-                    <input type="hidden" name="return_to" value="{{$.To}}">
-                    <input type="hidden" name="return_page" value="{{$.Page}}">
-                    <button type="submit" class="menu-item px-2 text-rose-700 hover:text-rose-900">Delete</button>
-                  </form>
-                </div>
-              {{end}}
-            </div>
-          </li>
-        {{end}}
-      </ul>
-    </div>
+			{{ if .Entries }}
+				<div class="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+					<ul class="divide-y divide-stone-100">
+						{{ range .Entries }}
+							<li class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 py-2.5 sm:px-5">
+								<div class="min-w-0">
+									<p class="font-medium wrap-anywhere text-stone-900">
+										{{ with .Entry.Description }}{{ . }}{{ else }}<span class="text-stone-500">{{ .KindLabel }}</span>{{ end }}
+									</p>
+									<p class="mt-0.5 text-xs wrap-anywhere text-stone-600 sm:text-sm">
+										<time datetime="{{ .Entry.DateString }}">{{ .Entry.DateString }}</time> &middot; {{ .Attribution }}
+									</p>
+								</div>
+								<div class="flex min-w-0 flex-col items-end">
+									<p class="max-w-[9rem] text-right font-semibold wrap-anywhere tabular-nums sm:max-w-none sm:text-lg {{ if .IsIncome }}text-emerald-700{{ else }}text-rose-700{{ end }}">
+										{{ if .IsIncome }}+{{ else }}-{{ end }}{{ .Entry.DisplayAmount }} {{ .Entry.CurrencyCode }}
+									</p>
+									{{ if .CanModify }}
+										<div class="flex items-center gap-1 text-sm">
+											<a href="{{ .EditURL }}" class="menu-item min-w-11 justify-center px-2">Edit</a>
+											<form method="post" action="{{ .DeleteURL }}" hx-disabled-elt="find button" hx-post="{{ .DeleteURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" data-confirm="Delete this entry?">
+												<input type="hidden" name="csrf_token" value="{{ $.CSRF }}">
+												<input type="hidden" name="return_scope" value="{{ if $.ScopeAll }}all{{ end }}">
+												<input type="hidden" name="return_from" value="{{ $.From }}">
+												<input type="hidden" name="return_to" value="{{ $.To }}">
+												<input type="hidden" name="return_page" value="{{ $.Page }}">
+												<button type="submit" class="menu-item px-2 text-rose-700 hover:text-rose-900">Delete</button>
+											</form>
+										</div>
+									{{ end }}
+								</div>
+							</li>
+						{{ end }}
+					</ul>
+				</div>
 
-    {{if gt .TotalPages 1}}
-      <nav class="mt-5 flex flex-wrap items-center justify-between gap-2 text-sm" aria-label="Pagination">
-        <div>
-          {{if .PreviousURL}}
-            <a href="{{.PreviousURL}}" hx-get="{{.PreviousURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">&larr; Previous</a>
-          {{end}}
-        </div>
-        <p class="text-stone-500">Page {{.Page}} of {{.TotalPages}} &middot; {{.Total}} entries</p>
-        <div>
-          {{if .NextURL}}
-            <a href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Next &rarr;</a>
-          {{end}}
-        </div>
-      </nav>
-    {{end}}
-  {{else}}
-    <div class="mt-4 rounded-2xl border border-dashed border-stone-300 bg-white p-5 text-center sm:p-8">
-      {{if or .From .To}}
-        <h2 class="text-lg font-semibold text-stone-900">No entries match these dates</h2>
-        <p class="mt-2 text-sm text-stone-600">Try a different date range or clear the filters to see more entries.</p>
-        <a href="{{.ClearURL}}" class="btn-secondary mt-4 min-h-11">Clear filters</a>
-      {{else}}
-        <h2 class="text-lg font-semibold text-stone-900">No {{.Kind}} entries yet</h2>
-        <p class="mt-2 text-sm text-stone-600">Enter an amount to start. The date and currency are already filled in.</p>
-      {{end}}
-    </div>
-  {{end}}
-  </div>
-  </div>
+				{{ if gt .TotalPages 1 }}
+					<nav class="mt-5 flex flex-wrap items-center justify-between gap-2 text-sm" aria-label="Pagination">
+						<div>
+							{{ if .PreviousURL }}
+								<a href="{{ .PreviousURL }}" hx-get="{{ .PreviousURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">&larr; Previous</a>
+							{{ end }}
+						</div>
+						<p class="text-stone-500">Page {{ .Page }} of {{ .TotalPages }} &middot; {{ .Total }} entries</p>
+						<div>
+							{{ if .NextURL }}
+								<a href="{{ .NextURL }}" hx-get="{{ .NextURL }}" hx-target="#entries-content" hx-select="#entries-content" hx-swap="outerHTML" hx-push-url="true" class="inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-3 py-2 font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Next &rarr;</a>
+							{{ end }}
+						</div>
+					</nav>
+				{{ end }}
+			{{ else }}
+				<div class="mt-4 rounded-2xl border border-dashed border-stone-300 bg-white p-5 text-center sm:p-8">
+					{{ if or .From .To }}
+						<h2 class="text-lg font-semibold text-stone-900">No entries match these dates</h2>
+						<p class="mt-2 text-sm text-stone-600">Try a different date range or clear the filters to see more entries.</p>
+						<a href="{{ .ClearURL }}" class="btn-secondary mt-4 min-h-11">Clear filters</a>
+					{{ else }}
+						<h2 class="text-lg font-semibold text-stone-900">No {{ .Kind }} entries yet</h2>
+						<p class="mt-2 text-sm text-stone-600">Enter an amount to start. The date and currency are already filled in.</p>
+					{{ end }}
+				</div>
+			{{ end }}
+		</div>
+	</div>
 </section>
-{{end}}
+{{ end }}
 
-{{define "entries_error"}}
+{{ define "entries_error" }}
 <section id="entries-content" class="mt-6">
-  <div role="alert" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
-    {{.Message}}
-  </div>
-  <a href="{{.ReturnURL}}" class="mt-4 inline-flex rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Back to entries</a>
+	<div role="alert" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+		{{ .Message }}
+	</div>
+	<a href="{{ .ReturnURL }}" class="mt-4 inline-flex rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm hover:bg-stone-50">Back to entries</a>
 </section>
-{{end}}
+{{ end }}

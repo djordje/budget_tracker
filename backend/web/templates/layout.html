@@ -1,76 +1,76 @@
-{{define "layout"}}<!doctype html>
+{{ define "layout" }}<!doctype html>
 <html lang="en" class="h-full bg-stone-50">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="description" content="A clear, shared view of your household's income and spending.">
-    <meta name="htmx-config" content='{"allowEval":false,"includeIndicatorStyles":false,"historyRestoreAsHxRequest":false}'>
-    <title>{{.Title}}</title>
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/css/app.css">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="color-scheme" content="light">
+		<meta name="description" content="A clear, shared view of your household's income and spending.">
+		<meta name="htmx-config" content='{"allowEval":false,"includeIndicatorStyles":false,"historyRestoreAsHxRequest":false}'>
+		<title>{{ .Title }}</title>
+		<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+		<link rel="stylesheet" href="/static/css/app.css">
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
-  </head>
-  <body class="flex min-h-full flex-col text-stone-900 antialiased">
-    <a href="#main" class="sr-only rounded-md bg-white px-4 py-2 font-semibold text-emerald-700 shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30">
-      Skip to content
-    </a>
+	</head>
+	<body class="flex min-h-full flex-col text-stone-900 antialiased">
+		<a href="#main" class="sr-only rounded-md bg-white px-4 py-2 font-semibold text-emerald-700 shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30">
+			Skip to content
+		</a>
 
-    <header class="border-b border-stone-200 bg-white">
-      <div class="relative mx-auto flex max-w-5xl items-center gap-2 px-4 py-2 sm:px-6">
-        <a href="{{if .ActiveHousehold}}{{householdURL .ActiveHousehold.ID "/entries"}}{{else if .Authenticated}}/app{{else}}/{{end}}" class="flex min-h-11 min-w-11 shrink-0 items-center gap-2 rounded-lg font-semibold tracking-tight text-stone-900">
-          <span class="grid size-11 place-items-center rounded-xl bg-emerald-700 text-white shadow-sm" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" class="size-5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
-              <path d="M4 19V11M10 19V7M16 19V4M22 19H2"/>
-            </svg>
-          </span>
-          <span class="sr-only lg:not-sr-only">Budget Tracker</span>
-        </a>
+		<header class="border-b border-stone-200 bg-white">
+			<div class="relative mx-auto flex max-w-5xl items-center gap-2 px-4 py-2 sm:px-6">
+				<a href="{{ if .ActiveHousehold }}{{ householdURL .ActiveHousehold.ID "/entries" }}{{ else if .Authenticated }}/app{{ else }}/{{ end }}" class="flex min-h-11 min-w-11 shrink-0 items-center gap-2 rounded-lg font-semibold tracking-tight text-stone-900">
+					<span class="grid size-11 place-items-center rounded-xl bg-emerald-700 text-white shadow-sm" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" class="size-5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+							<path d="M4 19V11M10 19V7M16 19V4M22 19H2"/>
+						</svg>
+					</span>
+					<span class="sr-only lg:not-sr-only">Budget Tracker</span>
+				</a>
 
-        {{if .ActiveHousehold}}
-          {{template "household_picker" .}}
-          <nav class="ml-auto hidden shrink-0 items-center gap-1 md:flex" aria-label="Main">
-            {{template "household_navigation" .}}
-          </nav>
-          <details name="header-menu" class="ml-auto shrink-0 md:hidden">
-            <summary class="menu-trigger">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-              <span class="sr-only">Menu</span>
-            </summary>
-            <nav class="header-popover absolute right-4 top-full z-20 space-y-1 sm:right-6" aria-label="Main">
-              {{template "household_navigation" .}}
-            </nav>
-          </details>
-        {{else if .Authenticated}}
-          <div class="ml-auto">{{template "sign_out" .}}</div>
-        {{else}}
-          <nav class="ml-auto flex items-center gap-2" aria-label="Account">
-            <a href="/login" class="menu-item">Sign in</a>
-            <a href="/register" class="menu-item bg-emerald-700 text-white hover:bg-emerald-800">Create account</a>
-          </nav>
-        {{end}}
-      </div>
-    </header>
+				{{ if .ActiveHousehold }}
+					{{ template "household_picker" . }}
+					<nav class="ml-auto hidden shrink-0 items-center gap-1 md:flex" aria-label="Main">
+						{{ template "household_navigation" . }}
+					</nav>
+					<details name="header-menu" class="ml-auto shrink-0 md:hidden">
+						<summary class="menu-trigger">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-5" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+							<span class="sr-only">Menu</span>
+						</summary>
+						<nav class="header-popover absolute right-4 top-full z-20 space-y-1 sm:right-6" aria-label="Main">
+							{{ template "household_navigation" . }}
+						</nav>
+					</details>
+				{{ else if .Authenticated }}
+					<div class="ml-auto">{{ template "sign_out" . }}</div>
+				{{ else }}
+					<nav class="ml-auto flex items-center gap-2" aria-label="Account">
+						<a href="/login" class="menu-item">Sign in</a>
+						<a href="/register" class="menu-item bg-emerald-700 text-white hover:bg-emerald-800">Create account</a>
+					</nav>
+				{{ end }}
+			</div>
+		</header>
 
-    {{with .Notice}}
-      <div class="mx-auto w-full max-w-5xl px-4 pt-4 sm:px-6">
-        <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-          {{.}}
-        </div>
-      </div>
-    {{end}}
+		{{ with .Notice }}
+			<div class="mx-auto w-full max-w-5xl px-4 pt-4 sm:px-6">
+				<div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+					{{ . }}
+				</div>
+			</div>
+		{{ end }}
 
-    <main id="main" class="flex-1">
-      {{template "content" .}}
-    </main>
+		<main id="main" class="flex-1">
+			{{ template "content" . }}
+		</main>
 
-    <footer class="border-t border-stone-200 bg-white">
-      <div class="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-6 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <p>&copy; {{.Year}} Budget Tracker</p>
-        <p>Built for shared household money.</p>
-      </div>
-    </footer>
-  </body>
+		<footer class="border-t border-stone-200 bg-white">
+			<div class="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-6 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+				<p>&copy; {{ .Year }} Budget Tracker</p>
+				<p>Built for shared household money.</p>
+			</div>
+		</footer>
+	</body>
 </html>
-{{end}}
+{{ end }}

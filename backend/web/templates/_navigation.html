@@ -1,49 +1,49 @@
-{{define "household_picker"}}
+{{ define "household_picker" }}
 <details name="header-menu" class="min-w-0">
-  <summary class="menu-trigger" aria-label="Households: {{.ActiveHousehold.Name}}">
-    <span class="min-w-0 truncate">{{.ActiveHousehold.Name}}</span>
-    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" class="size-4 shrink-0"><path d="m5 7.5 5 5 5-5"/></svg>
-  </summary>
-  <ul class="header-popover absolute left-4 top-full z-20 sm:left-6">
-    {{range .Households}}
-      <li>
-        {{if eq .ID $.ActiveHousehold.ID}}
-          <span class="menu-item bg-stone-100 font-semibold">
-            <span aria-hidden="true">✓</span><span class="sr-only">Current household:</span> {{.Name}}
-          </span>
-        {{else}}
-          <a class="menu-item" href="{{householdURL .ID $.SwitchDestination}}">{{.Name}}</a>
-        {{end}}
-      </li>
-    {{end}}
-    <li class="mt-1 border-t border-stone-200 pt-1"><a class="menu-item" href="/app/households/new">Create household</a></li>
-  </ul>
+	<summary class="menu-trigger" aria-label="Households: {{ .ActiveHousehold.Name }}">
+		<span class="min-w-0 truncate">{{ .ActiveHousehold.Name }}</span>
+		<svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" class="size-4 shrink-0"><path d="m5 7.5 5 5 5-5"/></svg>
+	</summary>
+	<ul class="header-popover absolute left-4 top-full z-20 sm:left-6">
+		{{ range .Households }}
+			<li>
+				{{ if eq .ID $.ActiveHousehold.ID }}
+					<span class="menu-item bg-stone-100 font-semibold">
+						<span aria-hidden="true">✓</span><span class="sr-only">Current household:</span> {{ .Name }}
+					</span>
+				{{ else }}
+					<a class="menu-item" href="{{ householdURL .ID $.SwitchDestination }}">{{ .Name }}</a>
+				{{ end }}
+			</li>
+		{{ end }}
+		<li class="mt-1 border-t border-stone-200 pt-1"><a class="menu-item" href="/app/households/new">Create household</a></li>
+	</ul>
 </details>
-{{end}}
+{{ end }}
 
-{{define "household_navigation"}}
+{{ define "household_navigation" }}
 {{/* Section and Page come from the web.Section and web.Page constants. */}}
-<a class="menu-item {{if eq .Section "entries"}}menu-active{{end}}" href="{{householdURL .ActiveHousehold.ID "/entries"}}"{{if eq .CurrentPage "entries"}} aria-current="page"{{end}}>Entries</a>
-<a class="menu-item {{if eq .Section "reports"}}menu-active{{end}}" href="{{householdURL .ActiveHousehold.ID "/reports"}}"{{if eq .CurrentPage "reports"}} aria-current="page"{{end}}>Reports</a>
+<a class="menu-item {{ if eq .Section "entries" }}menu-active{{ end }}" href="{{ householdURL .ActiveHousehold.ID "/entries" }}"{{ if eq .CurrentPage "entries" }} aria-current="page"{{ end }}>Entries</a>
+<a class="menu-item {{ if eq .Section "reports" }}menu-active{{ end }}" href="{{ householdURL .ActiveHousehold.ID "/reports" }}"{{ if eq .CurrentPage "reports" }} aria-current="page"{{ end }}>Reports</a>
 <details class="md:relative">
-  <summary class="menu-trigger {{if eq .Section "more"}}menu-active{{end}}">
-    More
-    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" class="size-4 shrink-0"><path d="m5 7.5 5 5 5-5"/></svg>
-  </summary>
-  <div class="space-y-1 md:header-popover md:absolute md:right-0 md:top-full md:z-20">
-    <a class="menu-item {{if eq .CurrentPage "exchange-rates"}}menu-active{{end}}" href="{{householdURL .ActiveHousehold.ID "/exchange-rates"}}"{{if eq .CurrentPage "exchange-rates"}} aria-current="page"{{end}}>Exchange rates</a>
-    <a class="menu-item {{if eq .CurrentPage "preferences"}}menu-active{{end}}" href="{{householdURL .ActiveHousehold.ID "/preferences"}}"{{if eq .CurrentPage "preferences"}} aria-current="page"{{end}}>Preferences</a>
-    {{if .ActiveHousehold.IsAdmin}}
-      <a class="menu-item {{if eq .CurrentPage "settings"}}menu-active{{end}}" href="{{householdURL .ActiveHousehold.ID "/settings"}}"{{if eq .CurrentPage "settings"}} aria-current="page"{{end}}>Household settings</a>
-    {{end}}
-    {{template "sign_out" .}}
-  </div>
+	<summary class="menu-trigger {{ if eq .Section "more" }}menu-active{{ end }}">
+		More
+		<svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" class="size-4 shrink-0"><path d="m5 7.5 5 5 5-5"/></svg>
+	</summary>
+	<div class="space-y-1 md:header-popover md:absolute md:right-0 md:top-full md:z-20">
+		<a class="menu-item {{ if eq .CurrentPage "exchange-rates" }}menu-active{{ end }}" href="{{ householdURL .ActiveHousehold.ID "/exchange-rates" }}"{{ if eq .CurrentPage "exchange-rates" }} aria-current="page"{{ end }}>Exchange rates</a>
+		<a class="menu-item {{ if eq .CurrentPage "preferences" }}menu-active{{ end }}" href="{{ householdURL .ActiveHousehold.ID "/preferences" }}"{{ if eq .CurrentPage "preferences" }} aria-current="page"{{ end }}>Preferences</a>
+		{{ if .ActiveHousehold.IsAdmin }}
+			<a class="menu-item {{ if eq .CurrentPage "settings" }}menu-active{{ end }}" href="{{ householdURL .ActiveHousehold.ID "/settings" }}"{{ if eq .CurrentPage "settings" }} aria-current="page"{{ end }}>Household settings</a>
+		{{ end }}
+		{{ template "sign_out" . }}
+	</div>
 </details>
-{{end}}
+{{ end }}
 
-{{define "sign_out"}}
+{{ define "sign_out" }}
 <form method="post" action="/logout">
-  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-  <button type="submit" class="menu-item w-full text-left">Sign out</button>
+	<input type="hidden" name="csrf_token" value="{{ .CSRF }}">
+	<button type="submit" class="menu-item w-full text-left">Sign out</button>
 </form>
-{{end}}
+{{ end }}
