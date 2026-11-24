@@ -27,9 +27,9 @@ func (s stubSessionLookup) SessionByToken(context.Context, string) (auth.Session
 	return s.session, nil
 }
 
-func createHouseholdRequest(t *testing.T, session auth.Session, handler http.Handler) *httptest.ResponseRecorder {
+func createHouseholdRequest(t *testing.T, session auth.Session, handler http.Handler, form string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(http.MethodPost, "/app/households", strings.NewReader("name=Home"))
+	request := httptest.NewRequest(http.MethodPost, "/app/households", strings.NewReader(form))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
 	recorder := httptest.NewRecorder()
@@ -53,6 +53,7 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 				assert.Equal(t, userID, params.UserID, "CreateAndActivate() actor")
 				assert.Equal(t, tokenHash, params.SessionTokenHash, "CreateAndActivate() session hash")
 				assert.Equal(t, "Home", params.Name, "CreateAndActivate() name")
+				assert.Equal(t, "EUR", params.CurrencyCode, "CreateAndActivate() currency")
 				return household, nil
 			},
 		},
@@ -64,7 +65,8 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 
 	recorder := createHouseholdRequest(t,
 		auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: tokenHash},
-		http.HandlerFunc(handler.CreateHousehold))
+		http.HandlerFunc(handler.CreateHousehold),
+		"name=Home&currency_code=EUR")
 
 	require.Equal(t, http.StatusSeeOther, recorder.Code, "body = %s", recorder.Body.String())
 	assert.Equal(t, householdURL(household.ID, "/entries?notice=household_created"), recorder.Header().Get("Location"), "Location")
@@ -72,16 +74,61 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 }
 
 func TestCreateHouseholdRendersValidationErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		form       string
+		validation households.ValidationError
+	}{
+		{
+			name:       "missing name",
+			form:       "name=&currency_code=EUR",
+			validation: households.ValidationError{Field: "name", Message: "Household name is required."},
+		},
+		{
+			name:       "unknown currency",
+			form:       "name=Home&currency_code=XXX",
+			validation: households.ValidationError{Field: "currency_code", Message: "Choose a supported currency."},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userID := uuid.New()
+			handler, err := New(Deps{
+				Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+				Sessions: stubSessions{},
+				Households: stubHouseholds{
+					createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
+						return households.Household{}, &tt.validation
+					},
+				},
+				Entries: stubEntries{},
+				Rates:   stubRates{},
+				Reports: stubReports{},
+			})
+			require.NoError(t, err, "New()")
+
+			recorder := createHouseholdRequest(t,
+				auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: strings.Repeat("a", 64)},
+				http.HandlerFunc(handler.CreateHousehold),
+				tt.form)
+
+			require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
+			assert.Empty(t, recorder.Header().Get("Location"), "validation failure returned a redirect")
+			assert.Contains(t, recorder.Body.String(), tt.validation.Message)
+		})
+	}
+}
+
+func TestCreateHouseholdRequiresVisibleCurrencyChoice(t *testing.T) {
 	userID := uuid.New()
+	var called bool
 	handler, err := New(Deps{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
 		Households: stubHouseholds{
 			createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
-				return households.Household{}, &households.ValidationError{
-					Field:   "name",
-					Message: "Household name is required.",
-				}
+				called = true
+				return households.Household{}, nil
 			},
 		},
 		Entries: stubEntries{},
@@ -92,11 +139,12 @@ func TestCreateHouseholdRendersValidationErrors(t *testing.T) {
 
 	recorder := createHouseholdRequest(t,
 		auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: strings.Repeat("a", 64)},
-		http.HandlerFunc(handler.CreateHousehold))
+		http.HandlerFunc(handler.CreateHousehold),
+		"name=Home&currency_code=")
 
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
-	assert.Empty(t, recorder.Header().Get("Location"), "validation failure returned a redirect")
-	assert.Contains(t, recorder.Body.String(), "Household name is required.")
+	assert.False(t, called, "CreateAndActivate() was called without a currency choice")
+	assert.Contains(t, recorder.Body.String(), "Choose a currency.")
 }
 
 func TestCreateHouseholdRendersActivationFailure(t *testing.T) {
@@ -117,7 +165,8 @@ func TestCreateHouseholdRendersActivationFailure(t *testing.T) {
 
 	recorder := createHouseholdRequest(t,
 		auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: strings.Repeat("a", 64)},
-		http.HandlerFunc(handler.CreateHousehold))
+		http.HandlerFunc(handler.CreateHousehold),
+		"name=Home&currency_code=EUR")
 
 	require.Equal(t, http.StatusUnauthorized, recorder.Code, "body = %s", recorder.Body.String())
 	assert.Empty(t, recorder.Header().Get("Location"), "activation failure returned a redirect")

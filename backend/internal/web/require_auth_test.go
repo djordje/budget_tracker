@@ -189,7 +189,7 @@ func TestRequireAuthWrappedHandlers(t *testing.T) {
 			name:   "create household",
 			method: http.MethodPost,
 			path:   "/app/households",
-			form:   "name=Home",
+			form:   "name=Home&currency_code=EUR",
 			handle: func(h *Handler) http.HandlerFunc { return h.CreateHousehold },
 		},
 		{

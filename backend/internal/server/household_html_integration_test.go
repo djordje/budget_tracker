@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,8 +18,9 @@ import (
 func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uuid.UUID {
 	t.Helper()
 	response := client.postForm(t, "/app/households", url.Values{
-		"csrf_token": {csrf},
-		"name":       {name},
+		"csrf_token":    {csrf},
+		"name":          {name},
+		"currency_code": {"RSD"},
 	})
 	body := readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "create household; body:\n%s", body)
@@ -39,13 +41,131 @@ func createHouseholdHTML(t *testing.T, client *testClient, csrf, name string) uu
 	return householdID
 }
 
+func TestHouseholdHTMLRequiresVisibleCurrencyChoice(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	response, err := client.follow.Get(client.baseURL + "/app/households/new")
+	require.NoError(t, err, "GET new household")
+	body := readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode, "new household; body:\n%s", body)
+	assert.Contains(t, body, `id="currency_code"`, "new household has no currency choice")
+	assert.Contains(t, body, `value="EUR"`, "new household does not list the catalog")
+
+	response = client.postForm(t, "/app/households", url.Values{
+		"csrf_token": {csrf},
+		"name":       {"Euro home"},
+	})
+	body = readBody(t, response)
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "missing currency; body:\n%s", body)
+	assert.Contains(t, body, "Choose a currency.")
+	var count int
+	require.NoError(t, client.pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM households WHERE name = $1", "Euro home",
+	).Scan(&count), "count households")
+	assert.Equal(t, 0, count, "household created without a currency choice")
+}
+
+// selectedHouseholdCurrency returns the value of the selected option in the
+// new-household currency select, or "" when the prompt is selected.
+func selectedHouseholdCurrency(t *testing.T, body string) string {
+	t.Helper()
+	start := strings.Index(body, `id="currency_code"`)
+	require.NotEqual(t, -1, start, "currency select not rendered")
+	rest := body[start:]
+	end := strings.Index(rest, "</select>")
+	require.NotEqual(t, -1, end, "currency select is not closed")
+
+	selected := ""
+	for _, chunk := range strings.Split(rest[:end], "<option ")[1:] {
+		attributes, _, ok := strings.Cut(chunk, ">")
+		require.True(t, ok, "option is not closed: %s", chunk)
+		if !strings.Contains(attributes, "selected") {
+			continue
+		}
+		valueStart := strings.Index(attributes, `value="`)
+		require.NotEqual(t, -1, valueStart, "selected option has no value: %s", attributes)
+		value := attributes[valueStart+len(`value="`):]
+		valueEnd := strings.Index(value, `"`)
+		require.NotEqual(t, -1, valueEnd, "selected option value is not closed: %s", attributes)
+		require.Empty(t, selected, "more than one currency option is selected")
+		selected = value[:valueEnd]
+	}
+	return selected
+}
+
+func TestHouseholdHTMLPreservesOnlyValidCurrencySelectionsOnError(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	for _, tc := range []struct {
+		name         string
+		formName     string
+		currency     string
+		wantSelected string
+		message      string
+	}{
+		{
+			name:     "unsupported currency",
+			formName: "Home",
+			currency: "XXX",
+			message:  "Choose a supported currency.",
+		},
+		{
+			name:         "valid currency with invalid name",
+			currency:     " eur ",
+			wantSelected: "EUR",
+			message:      "Household name is required.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := client.postForm(t, "/app/households", url.Values{
+				"csrf_token":    {csrf},
+				"name":          {tc.formName},
+				"currency_code": {tc.currency},
+			})
+			body := readBody(t, response)
+			require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "body:\n%s", body)
+			assert.Contains(t, body, tc.message)
+			assert.Equal(t, tc.wantSelected, selectedHouseholdCurrency(t, body), "selected currency")
+		})
+	}
+}
+
+func TestHouseholdHTMLSeedsChosenCurrency(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	response := client.postForm(t, "/app/households", url.Values{
+		"csrf_token":    {csrf},
+		"name":          {"Euro home"},
+		"currency_code": {"EUR"},
+	})
+	body := readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode, "create household; body:\n%s", body)
+	assert.Contains(t, body, "Household created.")
+
+	var income, spending, display string
+	require.NoError(t, client.pool.QueryRow(context.Background(), `
+		SELECT o.default_income_currency_code, o.default_spending_currency_code,
+		       o.default_display_currency_code
+		FROM household_options o
+		JOIN households h ON h.id = o.household_id
+		WHERE h.name = $1`, "Euro home",
+	).Scan(&income, &spending, &display), "read household options")
+	assert.Equal(t, "EUR", income, "default income currency")
+	assert.Equal(t, "EUR", spending, "default spending currency")
+	assert.Equal(t, "EUR", display, "default display currency")
+}
+
 func TestHouseholdHTMLRejectsInvalidUTF8Name(t *testing.T) {
 	client := newTestClient(t)
 	csrf := client.registerHTML(t, "ada@example.com")
 
 	response := client.postForm(t, "/app/households", url.Values{
-		"csrf_token": {csrf},
-		"name":       {"B\xffd"},
+		"csrf_token":    {csrf},
+		"name":          {"B\xffd"},
+		"currency_code": {"RSD"},
 	})
 	body := readBody(t, response)
 
@@ -58,8 +178,9 @@ func TestHouseholdHTMLFlow(t *testing.T) {
 	csrf := client.registerHTML(t, "ada@example.com")
 
 	response := client.postForm(t, "/app/households", url.Values{
-		"csrf_token": {csrf},
-		"name":       {""},
+		"csrf_token":    {csrf},
+		"name":          {""},
+		"currency_code": {"RSD"},
 	})
 	body := readBody(t, response)
 	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid household; body:\n%s", body)

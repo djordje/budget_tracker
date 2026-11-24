@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,8 +15,10 @@ import (
 
 type newHouseholdPageData struct {
 	pageData
-	Name        string
-	FieldErrors map[string]string
+	Name         string
+	Currencies   []finance.Currency
+	CurrencyCode string
+	FieldErrors  map[string]string
 }
 
 type householdSettingsPageData struct {
@@ -43,10 +46,17 @@ type invitationRow struct {
 
 // NewHouseholdPage serves the household creation form.
 func (h *Handler) NewHouseholdPage(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "household_new", http.StatusOK, newHouseholdPageData{pageData: h.basePageData(r, "New household")})
+	data, err := h.newHouseholdData(r, "", nil)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	h.render(w, r, "household_new", http.StatusOK, data)
 }
 
-// CreateHousehold creates a household and makes it active.
+// CreateHousehold creates a household and makes it active. The HTML form
+// requires a visible currency choice instead of silently assuming the default
+// that the JSON adapter keeps for clients that omit the field.
 func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 	session := sessionFromContext(r)
 	if err := r.ParseForm(); err != nil {
@@ -54,19 +64,27 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	name := r.FormValue("name")
+	currencyCode := strings.ToUpper(strings.TrimSpace(r.FormValue("currency_code")))
+	if currencyCode == "" {
+		h.renderNewHousehold(w, r, http.StatusUnprocessableEntity, name, currencyCode, map[string]string{
+			"currency_code": "Choose a currency.",
+		})
+		return
+	}
+
 	created, err := h.households.CreateAndActivate(r.Context(), households.CreateParams{
 		UserID:           session.User.ID,
 		SessionTokenHash: session.TokenHash,
-		Name:             r.FormValue("name"),
+		Name:             name,
+		CurrencyCode:     currencyCode,
 	})
 	if err != nil {
 		var validation *households.ValidationError
 		switch {
 		case errors.As(err, &validation):
-			h.render(w, r, "household_new", http.StatusUnprocessableEntity, newHouseholdPageData{
-				pageData:    h.basePageData(r, "New household"),
-				Name:        r.FormValue("name"),
-				FieldErrors: map[string]string{validation.Field: validation.Message},
+			h.renderNewHousehold(w, r, http.StatusUnprocessableEntity, name, currencyCode, map[string]string{
+				validation.Field: validation.Message,
 			})
 		case errors.Is(err, auth.ErrSessionNotFound):
 			h.cookies.Clear(w)
@@ -78,6 +96,48 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, householdURL(created.ID, "/entries?notice=household_created"), http.StatusSeeOther)
+}
+
+// renderNewHousehold re-renders the creation form with the submitted values
+// and field errors. The catalog is always shown so the choice stays available.
+func (h *Handler) renderNewHousehold(
+	w http.ResponseWriter,
+	r *http.Request,
+	status int,
+	name, currencyCode string,
+	fieldErrors map[string]string,
+) {
+	data, err := h.newHouseholdData(r, name, fieldErrors)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
+	// Leave the prompt selected unless the submitted code matches an option.
+	// Otherwise browsers would silently choose the first enabled currency.
+	for _, currency := range data.Currencies {
+		if currency.Code == currencyCode {
+			data.CurrencyCode = currencyCode
+			break
+		}
+	}
+	h.render(w, r, "household_new", status, data)
+}
+
+func (h *Handler) newHouseholdData(
+	r *http.Request,
+	name string,
+	fieldErrors map[string]string,
+) (newHouseholdPageData, error) {
+	currencies, err := h.entries.Currencies(r.Context())
+	if err != nil {
+		return newHouseholdPageData{}, err
+	}
+	return newHouseholdPageData{
+		pageData:    h.basePageData(r, "New household"),
+		Name:        name,
+		Currencies:  currencies,
+		FieldErrors: fieldErrors,
+	}, nil
 }
 
 // HouseholdSettings serves household settings for admins.
