@@ -129,8 +129,10 @@ func TestMigration0009RollsBackInvalidLegacyRows(t *testing.T) {
 			ctx := context.Background()
 
 			dropEntrySchemaConstraints(t, pool)
-			if _, err := pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version = 9"); err != nil {
-				require.NoError(t, err, "forget migration 0009")
+			// Forget 0009 and every later migration so the runner replays 0009
+			// instead of rejecting it as older than an applied migration.
+			if _, err := pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version >= 9"); err != nil {
+				require.NoError(t, err, "forget migration 0009 and later")
 			}
 			tc.seed(t, pool)
 
