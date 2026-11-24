@@ -243,11 +243,6 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finan
 	values := entryFormValuesFromRequest(r)
 	data = applyEntryFormValues(data, values)
 	data.ShowAttributionChoice = data.IsAdmin
-	data, err = h.orderCurrencyChoices(r.Context(), data)
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
 
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
@@ -371,11 +366,6 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 	data = applyEntryFormValues(data, values)
 	data.HouseholdWide = entry.IsHouseholdWide()
 	data.ShowAttributionChoice = false
-	data, err = h.orderCurrencyChoices(r.Context(), data)
-	if err != nil {
-		h.internalError(w, r, err)
-		return
-	}
 
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
@@ -529,7 +519,14 @@ func (h *Handler) renderEntryFormError(w http.ResponseWriter, r *http.Request, d
 	}
 }
 
+// renderEntryForm renders a form response. Currency choices are ordered here,
+// so successful saves, which redirect, never run the recents query.
 func (h *Handler) renderEntryForm(w http.ResponseWriter, r *http.Request, status int, data entryFormPageData) {
+	data, err := h.orderCurrencyChoices(r.Context(), data)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
 	if isHTMX(r) {
 		h.renderFragment(w, r, "entry_form", "entry_form_panel", http.StatusOK, data)
 		return

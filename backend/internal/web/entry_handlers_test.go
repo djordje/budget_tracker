@@ -400,3 +400,37 @@ func TestEditEntryFormPreservesEntryCurrency(t *testing.T) {
 	assert.Equal(t, []string{"JPY", "EUR", "AUD", "RSD", "USD"}, currencyOptions(t, body), "currency order")
 	assert.Contains(t, body, `value="JPY" selected`, "entry currency is not selected")
 }
+
+// countingRecentsEntryService counts recents lookups so tests can pin when the
+// query runs.
+type countingRecentsEntryService struct {
+	EntryService
+	recentCalls *int
+}
+
+func (s countingRecentsEntryService) Currencies(context.Context) ([]finance.Currency, error) {
+	return []finance.Currency{{Code: "RSD"}}, nil
+}
+
+func (s countingRecentsEntryService) RecentCurrencies(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	*s.recentCalls++
+	return nil, nil
+}
+
+func (s countingRecentsEntryService) Create(context.Context, finance.CreateParams) (finance.Entry, error) {
+	return finance.Entry{ID: 1}, nil
+}
+
+func TestSuccessfulEntrySaveSkipsRecentCurrenciesQuery(t *testing.T) {
+	householdID := uuid.New()
+	recentCalls := 0
+	entries := countingRecentsEntryService{recentCalls: &recentCalls}
+
+	recorder := serveCurrencyEntryForm(t, entries, householdID, http.MethodPost,
+		householdURL(householdID, "/spendings"),
+		"amount=1&currency_code=RSD&entry_date=2026-10-15", nil,
+		func(h *Handler) http.HandlerFunc { return h.CreateSpending })
+
+	require.Equal(t, http.StatusSeeOther, recorder.Code, "body = %s", recorder.Body.String())
+	assert.Equal(t, 0, recentCalls, "recents query ran on a successful save")
+}
