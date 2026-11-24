@@ -33,9 +33,19 @@ func newFixture(t *testing.T) *testFixture {
 
 	user := registerUser(t, authService, "ada@example.com")
 	other := registerUser(t, authService, "grace@example.com")
-	household, err := service.CreateAndActivate(context.Background(), user.User.ID, user.TokenHash, "  Home  ")
+	household, err := service.CreateAndActivate(context.Background(), CreateParams{
+		UserID:           user.User.ID,
+		SessionTokenHash: user.TokenHash,
+		Name:             "  Home  ",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "Create() error")
-	otherHouse, err := service.CreateAndActivate(context.Background(), other.User.ID, other.TokenHash, "Other home")
+	otherHouse, err := service.CreateAndActivate(context.Background(), CreateParams{
+		UserID:           other.User.ID,
+		SessionTokenHash: other.TokenHash,
+		Name:             "Other home",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "Create() other error")
 
 	return &testFixture{
@@ -92,6 +102,60 @@ func TestCreateListAndGet(t *testing.T) {
 	assert.Equal(t, "RSD", options.DefaultIncomeCurrencyCode, "default options = %+v", options)
 	assert.Equal(t, "RSD", options.DefaultSpendingCurrencyCode, "default options = %+v", options)
 	assert.Equal(t, "RSD", options.DefaultDisplayCurrencyCode, "default options = %+v", options)
+}
+
+func TestCreateAndActivateSeedsChosenCurrency(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+
+	created, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.user.User.ID,
+		SessionTokenHash: fixture.user.TokenHash,
+		Name:             "Euro home",
+		CurrencyCode:     " eur ",
+	})
+	require.NoError(t, err, "CreateAndActivate() error")
+
+	options, err := fixture.service.GetOptions(ctx, fixture.user.User.ID, created.ID)
+	require.NoError(t, err, "GetOptions() error")
+	assert.Equal(t, "EUR", options.DefaultIncomeCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, "EUR", options.DefaultSpendingCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, "EUR", options.DefaultDisplayCurrencyCode, "default options = %+v", options)
+}
+
+func TestCreateAndActivateDefaultsOmittedCurrency(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+
+	created, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.user.User.ID,
+		SessionTokenHash: fixture.user.TokenHash,
+		Name:             "Default home",
+	})
+	require.NoError(t, err, "CreateAndActivate() error")
+
+	options, err := fixture.service.GetOptions(ctx, fixture.user.User.ID, created.ID)
+	require.NoError(t, err, "GetOptions() error")
+	assert.Equal(t, DefaultCurrencyCode, options.DefaultIncomeCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, DefaultCurrencyCode, options.DefaultSpendingCurrencyCode, "default options = %+v", options)
+	assert.Equal(t, DefaultCurrencyCode, options.DefaultDisplayCurrencyCode, "default options = %+v", options)
+}
+
+func TestCreateAndActivateRejectsUnknownCurrency(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+
+	_, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.user.User.ID,
+		SessionTokenHash: fixture.user.TokenHash,
+		Name:             "Bad currency",
+		CurrencyCode:     "XXX",
+	})
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation, "CreateAndActivate() error")
+	assert.Equal(t, "currency_code", validation.Field, "validation field")
+	assert.Equal(t, "Choose a supported currency.", validation.Message, "validation message")
+	assertHouseholdCount(t, ctx, fixture.pool, "Bad currency", 0)
 }
 
 func TestCrossHouseholdAccessIsNotFound(t *testing.T) {
@@ -154,7 +218,12 @@ func TestNameValidation(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"", "   ", strings.Repeat("x", 101), "bad\nname"} {
-		_, err := fixture.service.CreateAndActivate(ctx, fixture.user.User.ID, fixture.user.TokenHash, name)
+		_, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+			UserID:           fixture.user.User.ID,
+			SessionTokenHash: fixture.user.TokenHash,
+			Name:             name,
+			CurrencyCode:     "RSD",
+		})
 		require.Error(t, err, "Create(%q)", name)
 		var validation *ValidationError
 		assert.ErrorAs(t, err, &validation, "Create(%q)", name)
@@ -165,21 +234,30 @@ func TestCreateAndActivateRollsBackOnActivationFailure(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
 
-	_, err := fixture.service.CreateAndActivate(ctx,
-		fixture.user.User.ID, strings.Repeat("ab", 32), "Orphan",
-	)
+	_, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.user.User.ID,
+		SessionTokenHash: strings.Repeat("ab", 32),
+		Name:             "Orphan",
+		CurrencyCode:     "RSD",
+	})
 	require.ErrorIs(t, err, auth.ErrSessionNotFound, "CreateAndActivate() invalid session")
 	assertHouseholdCount(t, ctx, fixture.pool, "Orphan", 0)
 
-	created, err := fixture.service.CreateAndActivate(ctx,
-		fixture.user.User.ID, fixture.user.TokenHash, "Orphan",
-	)
+	created, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.user.User.ID,
+		SessionTokenHash: fixture.user.TokenHash,
+		Name:             "Orphan",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "CreateAndActivate() retry error")
 	assertHouseholdCount(t, ctx, fixture.pool, "Orphan", 1)
 
-	_, err = fixture.service.CreateAndActivate(ctx,
-		fixture.otherUser.User.ID, fixture.user.TokenHash, "Mismatch",
-	)
+	_, err = fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.otherUser.User.ID,
+		SessionTokenHash: fixture.user.TokenHash,
+		Name:             "Mismatch",
+		CurrencyCode:     "RSD",
+	})
 	assert.ErrorIs(t, err, auth.ErrSessionNotFound, "CreateAndActivate() cross-user")
 	assertHouseholdCount(t, ctx, fixture.pool, "Mismatch", 0)
 

@@ -20,7 +20,7 @@ import (
 
 type stubHouseholdService struct {
 	HouseholdService
-	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
+	createAndActivate func(context.Context, households.CreateParams) (households.Household, error)
 	list              func(context.Context, uuid.UUID) ([]households.Household, error)
 	get               func(context.Context, uuid.UUID, uuid.UUID) (households.Household, error)
 	members           func(context.Context, uuid.UUID, uuid.UUID) ([]households.Member, error)
@@ -31,9 +31,9 @@ type stubHouseholdService struct {
 }
 
 func (s stubHouseholdService) CreateAndActivate(
-	ctx context.Context, userID uuid.UUID, sessionTokenHash, name string,
+	ctx context.Context, params households.CreateParams,
 ) (households.Household, error) {
-	return s.createAndActivate(ctx, userID, sessionTokenHash, name)
+	return s.createAndActivate(ctx, params)
 }
 
 func (s stubHouseholdService) List(ctx context.Context, userID uuid.UUID) ([]households.Household, error) {
@@ -113,10 +113,10 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 	}
 	var gotHash string
 	handler := NewHouseholdHandler(stubHouseholdService{
-		createAndActivate: func(_ context.Context, actorID uuid.UUID, sessionHash, name string) (households.Household, error) {
-			assert.Equal(t, userID, actorID, "CreateAndActivate() actor")
-			assert.Equal(t, "Home", name, "CreateAndActivate() name")
-			gotHash = sessionHash
+		createAndActivate: func(_ context.Context, params households.CreateParams) (households.Household, error) {
+			assert.Equal(t, userID, params.UserID, "CreateAndActivate() actor")
+			assert.Equal(t, "Home", params.Name, "CreateAndActivate() name")
+			gotHash = params.SessionTokenHash
 			return household, nil
 		},
 	}, discardLogger())
@@ -135,7 +135,7 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 
 func TestHouseholdHandlerCreateMapsActivationFailure(t *testing.T) {
 	handler := NewHouseholdHandler(stubHouseholdService{
-		createAndActivate: func(context.Context, uuid.UUID, string, string) (households.Household, error) {
+		createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
 			return households.Household{}, auth.ErrSessionNotFound
 		},
 	}, discardLogger())

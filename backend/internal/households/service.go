@@ -36,6 +36,11 @@ var (
 	ErrForbidden = errors.New("household action forbidden")
 )
 
+// DefaultCurrencyCode initializes all three currency defaults when a caller
+// creates a household without choosing one. JSON clients may omit the field,
+// so the default keeps their behavior unchanged.
+const DefaultCurrencyCode = "RSD"
+
 // ValidationError describes an invalid household field.
 type ValidationError struct {
 	Field   string
@@ -88,21 +93,41 @@ func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool}
 }
 
+// CreateParams contains the input for a new household. An empty CurrencyCode
+// initializes all three currency defaults to DefaultCurrencyCode.
+type CreateParams struct {
+	UserID           uuid.UUID
+	SessionTokenHash string
+	Name             string
+	CurrencyCode     string
+}
+
 // CreateAndActivate creates a household, its first admin membership, and
 // default options, then makes it the current session's active household. All
 // writes commit together or roll back together, and an invalid or missing
 // session rolls back the new household.
 func (s *Service) CreateAndActivate(
 	ctx context.Context,
-	userID uuid.UUID,
-	sessionTokenHash, name string,
+	params CreateParams,
 ) (Household, error) {
-	name, err := validateName(name)
+	name, err := validateName(params.Name)
 	if err != nil {
 		return Household{}, err
 	}
-	if sessionTokenHash == "" {
+	if params.SessionTokenHash == "" {
 		return Household{}, auth.ErrSessionNotFound
+	}
+
+	currencyCode := strings.ToUpper(strings.TrimSpace(params.CurrencyCode))
+	if currencyCode == "" {
+		currencyCode = DefaultCurrencyCode
+	}
+	exists, err := currencyExists(ctx, s.pool, currencyCode)
+	if err != nil {
+		return Household{}, err
+	}
+	if !exists {
+		return Household{}, &ValidationError{Field: "currency_code", Message: "Choose a supported currency."}
 	}
 
 	var household Household
@@ -120,12 +145,20 @@ func (s *Service) CreateAndActivate(
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO household_memberships (household_id, user_id, role)
 			VALUES ($1, $2, $3)`,
-			household.ID, userID, RoleAdmin,
+			household.ID, params.UserID, RoleAdmin,
 		); err != nil {
 			return fmt.Errorf("insert admin membership: %w", err)
 		}
 
-		if _, err := tx.Exec(ctx, "INSERT INTO household_options (household_id) VALUES ($1)", household.ID); err != nil {
+		// The chosen currency seeds all three defaults explicitly. Each default
+		// remains independently editable afterwards.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO household_options
+				(household_id, default_income_currency_code,
+				 default_spending_currency_code, default_display_currency_code)
+			VALUES ($1, $2, $2, $2)`,
+			household.ID, currencyCode,
+		); err != nil {
 			return fmt.Errorf("insert household options: %w", err)
 		}
 
@@ -133,7 +166,7 @@ func (s *Service) CreateAndActivate(
 			UPDATE sessions
 			SET active_household_id = $3
 			WHERE token_hash = $1 AND user_id = $2`,
-			sessionTokenHash, userID, household.ID,
+			params.SessionTokenHash, params.UserID, household.ID,
 		)
 		if err != nil {
 			return fmt.Errorf("activate household: %w", err)

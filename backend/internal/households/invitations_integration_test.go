@@ -37,7 +37,12 @@ func newInvitationFixture(t *testing.T) *invitationFixture {
 	admin := registerInviteUser(t, authService, "admin@example.com")
 	member := registerInviteUser(t, authService, "member@example.com")
 	outsider := registerInviteUser(t, authService, "outsider@example.com")
-	household, err := service.CreateAndActivate(ctx, admin.User.ID, admin.TokenHash, "Home")
+	household, err := service.CreateAndActivate(ctx, CreateParams{
+		UserID:           admin.User.ID,
+		SessionTokenHash: admin.TokenHash,
+		Name:             "Home",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "create household")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO household_memberships (household_id, user_id, role)
@@ -193,7 +198,12 @@ func TestInvitationEmailExpiryAndMismatch(t *testing.T) {
 func TestInvitationCrossHousehold(t *testing.T) {
 	fixture := newInvitationFixture(t)
 	ctx := context.Background()
-	other, err := fixture.service.CreateAndActivate(ctx, fixture.outsider.User.ID, fixture.outsider.TokenHash, "Other")
+	other, err := fixture.service.CreateAndActivate(ctx, CreateParams{
+		UserID:           fixture.outsider.User.ID,
+		SessionTokenHash: fixture.outsider.TokenHash,
+		Name:             "Other",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "create other household")
 	invitation, _, err := fixture.service.CreateInvitation(ctx, CreateInvitationParams{
 		HouseholdID: other.ID, ActorID: fixture.outsider.User.ID,

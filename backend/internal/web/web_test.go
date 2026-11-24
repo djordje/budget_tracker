@@ -60,14 +60,14 @@ type stubHouseholds struct {
 	invitations       []households.Invitation
 	err               error
 	getOptionsErr     error
-	createAndActivate func(context.Context, uuid.UUID, string, string) (households.Household, error)
+	createAndActivate func(context.Context, households.CreateParams) (households.Household, error)
 }
 
 func (s stubHouseholds) CreateAndActivate(
-	ctx context.Context, userID uuid.UUID, sessionTokenHash, name string,
+	ctx context.Context, params households.CreateParams,
 ) (households.Household, error) {
 	if s.createAndActivate != nil {
-		return s.createAndActivate(ctx, userID, sessionTokenHash, name)
+		return s.createAndActivate(ctx, params)
 	}
 	return households.Household{}, s.err
 }

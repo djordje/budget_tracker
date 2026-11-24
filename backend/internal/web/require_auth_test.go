@@ -51,10 +51,10 @@ type countingHouseholds struct {
 }
 
 func (s countingHouseholds) CreateAndActivate(
-	ctx context.Context, userID uuid.UUID, sessionTokenHash, name string,
+	ctx context.Context, params households.CreateParams,
 ) (households.Household, error) {
 	s.calls.createHousehold++
-	return s.stubHouseholds.CreateAndActivate(ctx, userID, sessionTokenHash, name)
+	return s.stubHouseholds.CreateAndActivate(ctx, params)
 }
 
 func (s countingHouseholds) Rename(ctx context.Context, userID, householdID uuid.UUID, name string) (households.Household, error) {

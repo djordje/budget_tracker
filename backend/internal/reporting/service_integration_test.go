@@ -42,7 +42,12 @@ func newReportFixture(t *testing.T) *reportFixture {
 	admin := registerReportUser(t, authService, "admin@example.com")
 	member := registerReportUser(t, authService, "member@example.com")
 	outsider := registerReportUser(t, authService, "outsider@example.com")
-	household, err := householdService.CreateAndActivate(ctx, admin.User.ID, admin.TokenHash, "Home")
+	household, err := householdService.CreateAndActivate(ctx, households.CreateParams{
+		UserID:           admin.User.ID,
+		SessionTokenHash: admin.TokenHash,
+		Name:             "Home",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "create household")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO household_memberships (household_id, user_id, role)

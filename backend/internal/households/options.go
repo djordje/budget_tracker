@@ -250,7 +250,7 @@ func (s *Service) validateCurrency(
 		validation.add(field, "Choose a currency.")
 		return "", nil
 	}
-	exists, err := s.currencyExists(ctx, code)
+	exists, err := currencyExists(ctx, s.pool, code)
 	if err != nil {
 		return "", err
 	}
@@ -273,7 +273,7 @@ func (s *Service) validateOptionalCurrency(
 	if code == "" {
 		return nil, nil
 	}
-	exists, err := s.currencyExists(ctx, code)
+	exists, err := currencyExists(ctx, s.pool, code)
 	if err != nil {
 		return nil, err
 	}
@@ -283,9 +283,10 @@ func (s *Service) validateOptionalCurrency(
 	return &code, nil
 }
 
-func (s *Service) currencyExists(ctx context.Context, code string) (bool, error) {
+// currencyExists reports whether the shared catalog contains code.
+func currencyExists(ctx context.Context, db rowQuerier, code string) (bool, error) {
 	var exists bool
-	if err := s.pool.QueryRow(ctx,
+	if err := db.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM currencies WHERE code = $1)", code,
 	).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check currency: %w", err)

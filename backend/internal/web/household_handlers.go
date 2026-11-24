@@ -54,9 +54,11 @@ func (h *Handler) CreateHousehold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.households.CreateAndActivate(
-		r.Context(), session.User.ID, session.TokenHash, r.FormValue("name"),
-	)
+	created, err := h.households.CreateAndActivate(r.Context(), households.CreateParams{
+		UserID:           session.User.ID,
+		SessionTokenHash: session.TokenHash,
+		Name:             r.FormValue("name"),
+	})
 	if err != nil {
 		var validation *households.ValidationError
 		switch {

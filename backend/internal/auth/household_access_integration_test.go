@@ -28,7 +28,12 @@ func TestSetActiveHousehold(t *testing.T) {
 		Password:  "correct horse battery staple",
 	})
 	require.NoError(t, err, "Register() error")
-	home, err := householdService.CreateAndActivate(ctx, session.User.ID, session.TokenHash, "Home")
+	home, err := householdService.CreateAndActivate(ctx, households.CreateParams{
+		UserID:           session.User.ID,
+		SessionTokenHash: session.TokenHash,
+		Name:             "Home",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "CreateAndActivate household")
 
 	require.NoError(t, service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, nil), "SetActiveHousehold(nil)")
@@ -49,7 +54,12 @@ func TestSetActiveHousehold(t *testing.T) {
 		Password:  "correct horse battery staple",
 	})
 	require.NoError(t, err, "Register other user")
-	otherHome, err := householdService.CreateAndActivate(ctx, otherSession.User.ID, otherSession.TokenHash, "Other home")
+	otherHome, err := householdService.CreateAndActivate(ctx, households.CreateParams{
+		UserID:           otherSession.User.ID,
+		SessionTokenHash: otherSession.TokenHash,
+		Name:             "Other home",
+		CurrencyCode:     "RSD",
+	})
 	require.NoError(t, err, "CreateAndActivate other household")
 
 	err = service.SetActiveHousehold(ctx, session.TokenHash, session.User.ID, &otherHome.ID)

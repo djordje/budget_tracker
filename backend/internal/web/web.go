@@ -54,7 +54,7 @@ type ReportService interface {
 
 // HouseholdService is the household behavior needed by HTML handlers.
 type HouseholdService interface {
-	CreateAndActivate(ctx context.Context, userID uuid.UUID, sessionTokenHash, name string) (households.Household, error)
+	CreateAndActivate(ctx context.Context, params households.CreateParams) (households.Household, error)
 	List(ctx context.Context, userID uuid.UUID) ([]households.Household, error)
 	Rename(ctx context.Context, userID, householdID uuid.UUID, name string) (households.Household, error)
 	Members(ctx context.Context, userID, householdID uuid.UUID) ([]households.Member, error)

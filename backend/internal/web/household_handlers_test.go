@@ -48,11 +48,11 @@ func TestCreateHouseholdUsesAtomicWorkflow(t *testing.T) {
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
 		Households: stubHouseholds{
-			createAndActivate: func(_ context.Context, actorID uuid.UUID, sessionHash, name string) (households.Household, error) {
+			createAndActivate: func(_ context.Context, params households.CreateParams) (households.Household, error) {
 				called++
-				assert.Equal(t, userID, actorID, "CreateAndActivate() actor")
-				assert.Equal(t, tokenHash, sessionHash, "CreateAndActivate() session hash")
-				assert.Equal(t, "Home", name, "CreateAndActivate() name")
+				assert.Equal(t, userID, params.UserID, "CreateAndActivate() actor")
+				assert.Equal(t, tokenHash, params.SessionTokenHash, "CreateAndActivate() session hash")
+				assert.Equal(t, "Home", params.Name, "CreateAndActivate() name")
 				return household, nil
 			},
 		},
@@ -77,7 +77,7 @@ func TestCreateHouseholdRendersValidationErrors(t *testing.T) {
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
 		Households: stubHouseholds{
-			createAndActivate: func(context.Context, uuid.UUID, string, string) (households.Household, error) {
+			createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
 				return households.Household{}, &households.ValidationError{
 					Field:   "name",
 					Message: "Household name is required.",
@@ -105,7 +105,7 @@ func TestCreateHouseholdRendersActivationFailure(t *testing.T) {
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Sessions: stubSessions{},
 		Households: stubHouseholds{
-			createAndActivate: func(context.Context, uuid.UUID, string, string) (households.Household, error) {
+			createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
 				return households.Household{}, auth.ErrSessionNotFound
 			},
 		},

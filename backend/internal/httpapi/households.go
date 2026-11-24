@@ -15,7 +15,7 @@ import (
 
 // HouseholdService is the household behavior needed by JSON handlers.
 type HouseholdService interface {
-	CreateAndActivate(ctx context.Context, userID uuid.UUID, sessionTokenHash, name string) (households.Household, error)
+	CreateAndActivate(ctx context.Context, params households.CreateParams) (households.Household, error)
 	List(ctx context.Context, userID uuid.UUID) ([]households.Household, error)
 	Get(ctx context.Context, userID, householdID uuid.UUID) (households.Household, error)
 	Members(ctx context.Context, userID, householdID uuid.UUID) ([]households.Member, error)
@@ -77,9 +77,11 @@ func (h *HouseholdHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	household, err := h.households.CreateAndActivate(
-		r.Context(), session.User.ID, session.TokenHash, request.Name,
-	)
+	household, err := h.households.CreateAndActivate(r.Context(), households.CreateParams{
+		UserID:           session.User.ID,
+		SessionTokenHash: session.TokenHash,
+		Name:             request.Name,
+	})
 	if err != nil {
 		h.handleError(w, r, err)
 		return
