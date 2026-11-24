@@ -127,6 +127,11 @@ func TestExchangeRateValidation(t *testing.T) {
 		field string
 	}{
 		{
+			name:  "missing pair",
+			param: CreateExchangeRateParams{HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, Rate: "1", RateDate: date(2026, 10, 1)},
+			field: "from_currency_code",
+		},
+		{
 			name:  "same currencies",
 			param: CreateExchangeRateParams{HouseholdID: fixture.householdID, ActorID: fixture.admin.User.ID, FromCurrencyCode: "EUR", ToCurrencyCode: "EUR", Rate: "1", RateDate: date(2026, 10, 1)},
 			field: "to_currency_code",

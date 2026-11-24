@@ -84,3 +84,40 @@ func TestRateFormDefaultsToUTCDate(t *testing.T) {
 	wantDates := []string{before.Format(entryDateLayout), after.Format(entryDateLayout)}
 	assert.Contains(t, wantDates, inputValue(t, recorder.Body.String(), "rate_date"), "rate date default")
 }
+
+func TestExchangeRatesPageDoesNotPreselectPair(t *testing.T) {
+	householdID := uuid.New()
+	handler, err := New(Deps{
+		Logger:   discardLogger(),
+		Sessions: stubSessions{},
+		Households: stubHouseholds{
+			households: []households.Household{{ID: householdID, Name: "Home", Role: households.RoleAdmin}},
+		},
+		Entries: currencyEntryService{catalog: []finance.Currency{
+			{Code: "AUD"}, {Code: "EUR"}, {Code: "RSD"}, {Code: "USD"},
+		}},
+		Rates:   stubRates{},
+		Reports: stubReports{},
+	})
+	require.NoError(t, err, "New()")
+
+	userID := uuid.New()
+	session := auth.Session{
+		UserID:            userID,
+		User:              auth.User{ID: userID},
+		ActiveHouseholdID: &householdID,
+	}
+	request := httptest.NewRequest(http.MethodGet, householdURL(householdID, "/exchange-rates"), nil)
+	request.SetPathValue("householdID", householdID.String())
+	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
+	recorder := httptest.NewRecorder()
+	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, discardLogger()).
+		Load(handler.Scoped("more", "exchange-rates", handler.ExchangeRatesPage)).
+		ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Equal(t, 2, strings.Count(body, `<option value="">Choose a currency</option>`),
+		"new rate form does not prompt for both currencies")
+	assert.NotContains(t, body, `selected`, "new rate form preselects a currency")
+}

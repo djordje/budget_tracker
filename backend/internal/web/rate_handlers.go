@@ -201,9 +201,6 @@ func (h *Handler) buildRatesPage(
 	if err != nil {
 		return exchangeRatesPageData{}, err
 	}
-	if values.From == "" && values.To == "" {
-		values.From, values.To = defaultRatePair(currencies)
-	}
 	if values.RateDate == "" {
 		values.RateDate = finance.Today().Format(entryDateLayout)
 	}
@@ -333,18 +330,4 @@ func (h *Handler) scopedRate(r *http.Request, id int64) (finance.ExchangeRate, e
 		}
 	}
 	return finance.ExchangeRate{}, finance.ErrNotFound
-}
-
-func defaultRatePair(currencies []finance.Currency) (string, string) {
-	has := make(map[string]bool, len(currencies))
-	for _, currency := range currencies {
-		has[currency.Code] = true
-	}
-	if has["EUR"] && has["RSD"] {
-		return "EUR", "RSD"
-	}
-	if len(currencies) >= 2 {
-		return currencies[0].Code, currencies[1].Code
-	}
-	return "", ""
 }

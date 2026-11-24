@@ -39,6 +39,18 @@ func TestExchangeRateHTMLFlow(t *testing.T) {
 	body := readBody(t, response)
 	require.Equal(t, http.StatusOK, response.StatusCode, "empty rates; body:\n%s", body)
 	assert.Contains(t, body, "No exchange rates yet")
+	assert.Contains(t, body, `<option value="">Choose a currency</option>`, "rate form does not prompt for a pair")
+	assert.NotContains(t, body, `value="EUR" selected`, "rate form preselects EUR")
+	assert.NotContains(t, body, `value="RSD" selected`, "rate form preselects RSD")
+
+	response = client.postForm(t, base+"/exchange-rates", url.Values{
+		"csrf_token": {csrf},
+		"rate":       {"117.25"},
+		"rate_date":  {"2026-10-15"},
+	})
+	body = readBody(t, response)
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "missing pair; body:\n%s", body)
+	assert.Contains(t, body, "Choose a source currency.", "missing pair validation copy")
 
 	response = client.postForm(t, base+"/exchange-rates", url.Values{
 		"csrf_token":         {csrf},

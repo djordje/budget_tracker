@@ -5,14 +5,16 @@
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div>
 			<label for="from_currency_code" class="block text-sm font-semibold text-stone-800">From</label>
-			<select id="from_currency_code" name="from_currency_code" class="field-select">
+			<select id="from_currency_code" name="from_currency_code" required class="field-select">
+				<option value="">Choose a currency</option>
 				{{ range .Currencies }}<option value="{{ .Code }}" {{ if eq .Code $.From }}selected{{ end }}>{{ .Code }}</option>{{ end }}
 			</select>
 			{{ template "field_error" (index .FieldErrors "from_currency_code") }}
 		</div>
 		<div>
 			<label for="to_currency_code" class="block text-sm font-semibold text-stone-800">To</label>
-			<select id="to_currency_code" name="to_currency_code" class="field-select">
+			<select id="to_currency_code" name="to_currency_code" required class="field-select">
+				<option value="">Choose a currency</option>
 				{{ range .Currencies }}<option value="{{ .Code }}" {{ if eq .Code $.To }}selected{{ end }}>{{ .Code }}</option>{{ end }}
 			</select>
 			{{ template "field_error" (index .FieldErrors "to_currency_code") }}
@@ -20,13 +22,13 @@
 	</div>
 	<div>
 		<label for="rate" class="block text-sm font-semibold text-stone-800">Rate</label>
-		<input id="rate" name="rate" type="text" inputmode="decimal" value="{{ .Rate }}"
+		<input id="rate" name="rate" type="text" inputmode="decimal" value="{{ .Rate }}" required
 			class="field-input">
 		{{ template "field_error" (index .FieldErrors "rate") }}
 	</div>
 	<div>
 		<label for="rate_date" class="block text-sm font-semibold text-stone-800">Date</label>
-		<input id="rate_date" name="rate_date" type="date" value="{{ .RateDate }}"
+		<input id="rate_date" name="rate_date" type="date" value="{{ .RateDate }}" required
 			class="field-input">
 		{{ template "field_error" (index .FieldErrors "rate_date") }}
 	</div>
