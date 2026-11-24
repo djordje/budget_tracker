@@ -116,13 +116,14 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 		createAndActivate: func(_ context.Context, params households.CreateParams) (households.Household, error) {
 			assert.Equal(t, userID, params.UserID, "CreateAndActivate() actor")
 			assert.Equal(t, "Home", params.Name, "CreateAndActivate() name")
+			assert.Equal(t, "EUR", params.CurrencyCode, "CreateAndActivate() currency")
 			gotHash = params.SessionTokenHash
 			return household, nil
 		},
 	}, discardLogger())
 
 	recorder := sessionRequest(t, auth.Session{UserID: userID, User: auth.User{ID: userID}, TokenHash: tokenHash}, http.HandlerFunc(handler.Create),
-		http.MethodPost, "/api/v1/households", `{"name":"Home"}`)
+		http.MethodPost, "/api/v1/households", `{"name":"Home","currency_code":"EUR"}`)
 
 	require.Equal(t, http.StatusCreated, recorder.Code, "body = %s", recorder.Body.String())
 	assert.Equal(t, tokenHash, gotHash, "session token hash")
@@ -131,6 +132,28 @@ func TestHouseholdHandlerCreateCommitsBeforeSuccess(t *testing.T) {
 	var body householdResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
 	assert.Equal(t, household.ID.String(), body.Household.ID, "response household = %+v", body.Household)
+}
+
+func TestHouseholdHandlerCreateMapsUnknownCurrency(t *testing.T) {
+	handler := NewHouseholdHandler(stubHouseholdService{
+		createAndActivate: func(context.Context, households.CreateParams) (households.Household, error) {
+			return households.Household{}, &households.ValidationError{
+				Field:   "currency_code",
+				Message: "Choose a supported currency.",
+			}
+		},
+	}, discardLogger())
+
+	recorder := sessionRequest(t,
+		auth.Session{UserID: uuid.New(), User: auth.User{ID: uuid.New()}, TokenHash: strings.Repeat("a", 64)},
+		http.HandlerFunc(handler.Create), http.MethodPost, "/api/v1/households",
+		`{"name":"Home","currency_code":"XXX"}`)
+
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
+	var body ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "decode response")
+	assert.Equal(t, "validation_failed", body.Error.Code, "error body = %+v", body.Error)
+	assert.Equal(t, "Choose a supported currency.", body.Error.Fields["currency_code"], "error body = %+v", body.Error)
 }
 
 func TestHouseholdHandlerCreateMapsActivationFailure(t *testing.T) {
@@ -210,4 +233,32 @@ func TestHouseholdHandlerRejectsMalformedPathID(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
 	assert.False(t, called, "service was called for a malformed household ID")
+}
+
+func TestCurrencyChoice(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+		want string
+		ok   bool
+	}{
+		{name: "omitted", ok: true},
+		{name: "code", raw: json.RawMessage(`"EUR"`), want: "EUR", ok: true},
+		{name: "normalization stays in the service", raw: json.RawMessage(`" eur "`), want: " eur ", ok: true},
+		{name: "empty string", raw: json.RawMessage(`""`), ok: false},
+		{name: "whitespace", raw: json.RawMessage(`" \t "`), ok: false},
+		{name: "null", raw: json.RawMessage(`null`), ok: false},
+		{name: "padded null", raw: json.RawMessage(" null "), ok: false},
+		{name: "number", raw: json.RawMessage(`42`), ok: false},
+		{name: "object", raw: json.RawMessage(`{}`), ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := currencyChoice(tt.raw)
+
+			assert.Equal(t, tt.ok, ok, "currencyChoice(%s) ok", tt.raw)
+			assert.Equal(t, tt.want, got, "currencyChoice(%s)", tt.raw)
+		})
+	}
 }

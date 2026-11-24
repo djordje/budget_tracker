@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,10 +80,17 @@ func (h *HouseholdHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	currencyCode, ok := currencyChoice(request.CurrencyCode)
+	if !ok {
+		WriteValidationError(w, map[string]string{"currency_code": "Choose a supported currency."})
+		return
+	}
+
 	household, err := h.households.CreateAndActivate(r.Context(), households.CreateParams{
 		UserID:           session.User.ID,
 		SessionTokenHash: session.TokenHash,
 		Name:             request.Name,
+		CurrencyCode:     currencyCode,
 	})
 	if err != nil {
 		h.handleError(w, r, err)
@@ -197,6 +207,30 @@ func householdIDFromPath(w http.ResponseWriter, r *http.Request) (uuid.UUID, boo
 
 type createHouseholdRequest struct {
 	Name string `json:"name"`
+	// RawMessage distinguishes omission (nil) from an explicit JSON null.
+	CurrencyCode json.RawMessage `json:"currency_code"`
+}
+
+// currencyChoice decodes the optional currency_code field. Omission returns an
+// empty code and keeps the server default. An explicit null, blank string, or
+// non-string value is not a currency choice, so the caller reports a field
+// error. Decoding JSON null into a string is a no-op rather than an error, so
+// null is rejected explicitly instead of relying on the blank check.
+func currencyChoice(raw json.RawMessage) (string, bool) {
+	if raw == nil {
+		return "", true
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", false
+	}
+	var code string
+	if err := json.Unmarshal(raw, &code); err != nil {
+		return "", false
+	}
+	if strings.TrimSpace(code) == "" {
+		return "", false
+	}
+	return code, true
 }
 
 type householdJSON struct {

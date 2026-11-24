@@ -119,6 +119,60 @@ func userIDByEmail(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
 	return id
 }
 
+func TestHouseholdAPIRejectsExplicitlyInvalidCurrency(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{name: "empty string", value: ""},
+		{name: "whitespace", value: " \t "},
+		{name: "null", value: nil},
+		{name: "number", value: 42},
+		{name: "unknown code", value: "XXX"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := client.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]any{
+				"name": "Home", "currency_code": tc.value,
+			}, csrf)
+			var validation errorEnvelope
+			decodeBody(t, response, &validation)
+			require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode)
+			assert.Equal(t, "validation_failed", validation.Error.Code)
+			assert.NotEmpty(t, validation.Error.Fields["currency_code"])
+		})
+	}
+
+	response := client.apiRequest(t, http.MethodGet, "/api/v1/households", nil, "")
+	var listed householdsEnvelope
+	decodeBody(t, response, &listed)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Empty(t, listed.Households, "invalid requests must not create households")
+}
+
+func TestHouseholdAPIAcceptsNormalizedCurrency(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+
+	response := client.apiRequest(t, http.MethodPost, "/api/v1/households", map[string]string{
+		"name": "Euro home", "currency_code": " eur ",
+	}, csrf)
+	var created householdEnvelope
+	decodeBody(t, response, &created)
+	require.Equal(t, http.StatusCreated, response.StatusCode, "create household status")
+	require.NotEmpty(t, created.Household.ID, "created household ID")
+
+	response = client.apiRequest(t, http.MethodGet, "/api/v1/households/"+created.Household.ID+"/options", nil, "")
+	var options optionsEnvelope
+	decodeBody(t, response, &options)
+	require.Equal(t, http.StatusOK, response.StatusCode, "get options status")
+	assert.Equal(t, "EUR", options.Options.DefaultIncomeCurrencyCode, "default income currency")
+	assert.Equal(t, "EUR", options.Options.DefaultSpendingCurrencyCode, "default spending currency")
+	assert.Equal(t, "EUR", options.Options.DefaultDisplayCurrencyCode, "default display currency")
+}
+
 func TestHouseholdAPIAuthorizationAndContracts(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
