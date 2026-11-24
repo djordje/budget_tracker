@@ -46,3 +46,4 @@ Rules:
 | 2026-11-22 | [Mobile-first UI and household URLs](./20261122_190603_mobile_first_ui.md) | Complete |
 | 2026-11-24 | [Deterministic HTML template formatting](./20261124_083844_html_template_formatting.md) | Complete |
 | 2026-11-24 | [iOS date input sizing](./20261124_220059_ios_date_input_sizing.md) | In progress |
+| 2026-11-24 | [Household currency choices](./20261124_223027_household_currency_choices.md) | Proposed |
