@@ -81,6 +81,14 @@
     @apply px-2;
   }
 
+  /* iOS WebKit's native date styling can make a full-width input overflow. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
   input[type="date"]::-webkit-date-and-time-value {
     text-align: start;
   }
