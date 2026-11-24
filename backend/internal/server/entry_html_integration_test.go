@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -336,4 +337,61 @@ func TestEntryHTMXFormResponses(t *testing.T) {
 	assert.Contains(t, body, "no longer available", "delete failure fragment")
 	assert.NotContains(t, body, "entry_deleted", "delete failure fragment advertised success")
 	assert.Contains(t, body, "Back to entries")
+}
+
+// currencyOptionCodes lists the currency codes of the entry form select in
+// render order. The page has no other three-letter option values.
+func currencyOptionCodes(t *testing.T, body string) []string {
+	t.Helper()
+	start := strings.Index(body, `id="currency_code"`)
+	require.NotEqual(t, -1, start, "currency select not rendered")
+	rest := body[start:]
+	end := strings.Index(rest, "</select>")
+	require.NotEqual(t, -1, end, "currency select is not closed")
+	matches := regexp.MustCompile(`<option value="([A-Z]{3})"`).FindAllStringSubmatch(rest[:end], -1)
+	codes := make([]string, 0, len(matches))
+	for _, match := range matches {
+		codes = append(codes, match[1])
+	}
+	return codes
+}
+
+func TestEntryFormOrdersCurrenciesByRecentUse(t *testing.T) {
+	client := newTestClient(t)
+	csrf := client.registerHTML(t, "ada@example.com")
+	homeID := createHouseholdHTML(t, client, csrf, "Home")
+	base := "/app/" + homeID.String()
+
+	response := client.postForm(t, base+"/spendings", url.Values{
+		"csrf_token":    {csrf},
+		"amount":        {"1"},
+		"currency_code": {"EUR"},
+		"entry_date":    {"2026-10-05"},
+	})
+	readBody(t, response)
+
+	response, err := client.follow.Get(client.baseURL + base + "/spendings/new")
+	require.NoError(t, err, "GET spending form")
+	body := readBody(t, response)
+	require.Equal(t, http.StatusOK, response.StatusCode, "spending form; body:\n%s", body)
+	assert.Equal(t,
+		[]string{"RSD", "EUR", "AUD", "BAM", "CAD", "CHF", "GBP", "JPY", "USD"},
+		currencyOptionCodes(t, body),
+		"default currency is not first, or recent order is wrong")
+	assert.Contains(t, body, `value="RSD" selected`, "default currency is not preselected")
+
+	response = client.postForm(t, base+"/spendings", url.Values{
+		"csrf_token":    {csrf},
+		"amount":        {"1"},
+		"currency_code": {"USD"},
+		"entry_date":    {"05/10/2026"},
+	})
+	body = readBody(t, response)
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode, "invalid date; body:\n%s", body)
+	assert.Contains(t, body, "Use a valid date in YYYY-MM-DD format.")
+	assert.Equal(t,
+		[]string{"USD", "EUR", "AUD", "BAM", "CAD", "CHF", "GBP", "JPY", "RSD"},
+		currencyOptionCodes(t, body),
+		"validation re-render did not keep the submitted currency first")
+	assert.Contains(t, body, `value="USD" selected`, "validation re-render did not preserve the submitted currency")
 }

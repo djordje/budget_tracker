@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,4 +238,165 @@ func TestNewEntryFormDefaultsToUTCDate(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
 	wantDates := []string{before.Format(entryDateLayout), after.Format(entryDateLayout)}
 	assert.Contains(t, wantDates, inputValue(t, recorder.Body.String(), "entry_date"), "entry date default")
+}
+
+// currencyEntryService provides an ordered catalog and recents to entry form
+// handlers. The embedded interface keeps the remaining service contract.
+type currencyEntryService struct {
+	EntryService
+	catalog []finance.Currency
+	recent  []string
+	entry   finance.Entry
+}
+
+func (s currencyEntryService) Currencies(context.Context) ([]finance.Currency, error) {
+	return s.catalog, nil
+}
+
+func (s currencyEntryService) RecentCurrencies(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return s.recent, nil
+}
+
+func (s currencyEntryService) Get(context.Context, uuid.UUID, finance.Kind, int64) (finance.Entry, error) {
+	return s.entry, nil
+}
+
+// currencyHouseholds serves one household whose effective spending default is
+// configured by the test.
+type currencyHouseholds struct {
+	stubHouseholds
+	view households.OptionsView
+}
+
+func (s currencyHouseholds) GetOptionsView(context.Context, uuid.UUID, uuid.UUID) (households.OptionsView, error) {
+	return s.view, nil
+}
+
+// currencyOptions lists the currency codes of the rendered entry form select,
+// in render order.
+func currencyOptions(t *testing.T, body string) []string {
+	t.Helper()
+	start := strings.Index(body, `id="currency_code"`)
+	require.NotEqual(t, -1, start, "currency select not rendered")
+	rest := body[start:]
+	end := strings.Index(rest, "</select>")
+	require.NotEqual(t, -1, end, "currency select is not closed")
+	matches := regexp.MustCompile(`<option value="([A-Z]{3})"`).FindAllStringSubmatch(rest[:end], -1)
+	codes := make([]string, 0, len(matches))
+	for _, match := range matches {
+		codes = append(codes, match[1])
+	}
+	return codes
+}
+
+func serveCurrencyEntryForm(
+	t *testing.T,
+	entries EntryService,
+	householdID uuid.UUID,
+	method, path, form string,
+	pathValues map[string]string,
+	handle func(*Handler) http.HandlerFunc,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	handler, err := New(Deps{
+		Logger:   discardLogger(),
+		Sessions: stubSessions{},
+		Households: currencyHouseholds{
+			stubHouseholds: stubHouseholds{
+				households: []households.Household{{ID: householdID, Name: "Home", Role: households.RoleAdmin}},
+			},
+			view: households.OptionsView{Effective: households.EffectiveOptions{
+				DefaultIncomeCurrencyCode:   "RSD",
+				DefaultSpendingCurrencyCode: "RSD",
+				DefaultDisplayCurrencyCode:  "RSD",
+			}},
+		},
+		Entries: entries,
+		Rates:   stubRates{},
+		Reports: stubReports{},
+	})
+	require.NoError(t, err, "New()")
+
+	userID := uuid.New()
+	session := auth.Session{
+		UserID:            userID,
+		User:              auth.User{ID: userID},
+		ActiveHouseholdID: &householdID,
+	}
+	request := httptest.NewRequest(method, path, strings.NewReader(form))
+	request.SetPathValue("householdID", householdID.String())
+	for name, value := range pathValues {
+		request.SetPathValue(name, value)
+	}
+	if form != "" {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	request.AddCookie(&http.Cookie{Name: auth.DefaultSessionCookieName, Value: "raw"})
+	recorder := httptest.NewRecorder()
+	auth.NewMiddleware(stubSessionLookup{session: session}, auth.CookieConfig{}, discardLogger()).
+		Load(handler.Scoped("entries", "", handle(handler))).
+		ServeHTTP(recorder, request)
+	return recorder
+}
+
+func TestNewEntryFormOrdersCurrenciesByRelevance(t *testing.T) {
+	householdID := uuid.New()
+	entries := currencyEntryService{
+		catalog: []finance.Currency{{Code: "AUD"}, {Code: "EUR"}, {Code: "JPY"}, {Code: "RSD"}, {Code: "USD"}},
+		recent:  []string{"EUR"},
+	}
+
+	recorder := serveCurrencyEntryForm(t, entries, householdID, http.MethodGet,
+		householdURL(householdID, "/spendings/new"), "", nil,
+		func(h *Handler) http.HandlerFunc { return h.NewSpendingPage })
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Equal(t, []string{"RSD", "EUR", "AUD", "JPY", "USD"}, currencyOptions(t, body), "currency order")
+	assert.Contains(t, body, `value="RSD" selected`, "default currency is not preselected")
+}
+
+func TestEntryFormPreservesSubmittedCurrencyOnValidationErrors(t *testing.T) {
+	householdID := uuid.New()
+	entries := currencyEntryService{
+		catalog: []finance.Currency{{Code: "AUD"}, {Code: "EUR"}, {Code: "JPY"}, {Code: "RSD"}, {Code: "USD"}},
+		recent:  []string{"EUR"},
+	}
+
+	recorder := serveCurrencyEntryForm(t, entries, householdID, http.MethodPost,
+		householdURL(householdID, "/spendings"),
+		"amount=1&currency_code=JPY&entry_date=15%2F10%2F2026", nil,
+		func(h *Handler) http.HandlerFunc { return h.CreateSpending })
+
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Equal(t, []string{"JPY", "EUR", "AUD", "RSD", "USD"}, currencyOptions(t, body), "currency order")
+	assert.Contains(t, body, `value="JPY" selected`, "submitted currency was not preserved")
+}
+
+func TestEditEntryFormPreservesEntryCurrency(t *testing.T) {
+	householdID := uuid.New()
+	entries := currencyEntryService{
+		catalog: []finance.Currency{{Code: "AUD"}, {Code: "EUR"}, {Code: "JPY"}, {Code: "RSD"}, {Code: "USD"}},
+		recent:  []string{"EUR"},
+		// A household-wide entry is editable by the admin session below, so the
+		// test isolates currency ordering and selection.
+		entry: finance.Entry{
+			ID:           42,
+			Kind:         finance.KindSpending,
+			HouseholdID:  householdID,
+			AmountMinor:  150,
+			CurrencyCode: "JPY",
+		},
+	}
+
+	recorder := serveCurrencyEntryForm(t, entries, householdID, http.MethodGet,
+		householdURL(householdID, "/spendings/42/edit"), "",
+		map[string]string{"entryID": "42"},
+		func(h *Handler) http.HandlerFunc { return h.EditSpendingPage })
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body = %s", recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Equal(t, []string{"JPY", "EUR", "AUD", "RSD", "USD"}, currencyOptions(t, body), "currency order")
+	assert.Contains(t, body, `value="JPY" selected`, "entry currency is not selected")
 }

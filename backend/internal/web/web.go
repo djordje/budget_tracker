@@ -32,6 +32,7 @@ type SessionService interface {
 // EntryService is the finance behavior needed by HTML handlers.
 type EntryService interface {
 	Currencies(ctx context.Context) ([]finance.Currency, error)
+	RecentCurrencies(ctx context.Context, householdID, actorID uuid.UUID) ([]string, error)
 	Create(ctx context.Context, params finance.CreateParams) (finance.Entry, error)
 	Get(ctx context.Context, actorID uuid.UUID, kind finance.Kind, id int64) (finance.Entry, error)
 	Update(ctx context.Context, params finance.UpdateParams) (finance.Entry, error)

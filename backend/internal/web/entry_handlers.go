@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -209,6 +210,11 @@ func (h *Handler) newEntry(w http.ResponseWriter, r *http.Request, kind finance.
 	data.Description = ""
 	data.HouseholdWide = false
 	data.ShowAttributionChoice = data.IsAdmin
+	data, err = h.orderCurrencyChoices(r.Context(), data)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
 	h.render(w, r, "entry_form", http.StatusOK, data)
 }
 
@@ -237,6 +243,11 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request, kind finan
 	values := entryFormValuesFromRequest(r)
 	data = applyEntryFormValues(data, values)
 	data.ShowAttributionChoice = data.IsAdmin
+	data, err = h.orderCurrencyChoices(r.Context(), data)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
 
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
@@ -310,6 +321,11 @@ func (h *Handler) editEntry(w http.ResponseWriter, r *http.Request, kind finance
 	}
 	data.HouseholdWide = entry.IsHouseholdWide()
 	data.ShowAttributionChoice = false
+	data, err = h.orderCurrencyChoices(r.Context(), data)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
 	h.render(w, r, "entry_form", http.StatusOK, data)
 }
 
@@ -355,6 +371,11 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request, kind finan
 	data = applyEntryFormValues(data, values)
 	data.HouseholdWide = entry.IsHouseholdWide()
 	data.ShowAttributionChoice = false
+	data, err = h.orderCurrencyChoices(r.Context(), data)
+	if err != nil {
+		h.internalError(w, r, err)
+		return
+	}
 
 	entryDate, dateErr := parseFormDate(values.EntryDate)
 	if dateErr != nil {
@@ -475,6 +496,19 @@ func (h *Handler) entryFormBase(r *http.Request, kind finance.Kind, isEdit bool)
 		IsAdmin:     household.IsAdmin(),
 		FieldErrors: make(map[string]string),
 	}, nil
+}
+
+// orderCurrencyChoices puts the current selection first, then the currencies
+// the actor recorded recently in the active household, then the rest of the
+// catalog. It runs only when an entry form is rendered, including validation
+// responses, and never changes which currency is selected.
+func (h *Handler) orderCurrencyChoices(ctx context.Context, data entryFormPageData) (entryFormPageData, error) {
+	recent, err := h.entries.RecentCurrencies(ctx, data.ActiveHousehold.ID, data.User.ID)
+	if err != nil {
+		return data, err
+	}
+	data.Currencies = finance.OrderCurrencies(data.Currencies, data.CurrencyCode, recent)
+	return data, nil
 }
 
 func (h *Handler) renderEntryFormError(w http.ResponseWriter, r *http.Request, data entryFormPageData, err error) {

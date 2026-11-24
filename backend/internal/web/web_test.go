@@ -129,6 +129,9 @@ func (s stubHouseholds) AcceptInvitation(context.Context, string, uuid.UUID) (ho
 type stubEntries struct{}
 
 func (stubEntries) Currencies(context.Context) ([]finance.Currency, error) { return nil, nil }
+func (stubEntries) RecentCurrencies(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return nil, nil
+}
 func (stubEntries) Create(context.Context, finance.CreateParams) (finance.Entry, error) {
 	return finance.Entry{}, nil
 }
