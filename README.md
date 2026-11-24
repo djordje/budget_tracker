@@ -142,8 +142,10 @@ starts with the session's last-used accessible household (or the oldest
 accessible household if none is remembered); users without memberships go to
 onboarding. JSON endpoints that use an active household still use the session.
 Creating a household inserts the household, its admin membership, currency
-defaults, and the session preference in one transaction. Household currency
-options default to RSD.
+defaults, and the session preference in one transaction. The creating admin
+chooses the currency that seeds the income, spending, and display defaults;
+JSON clients that omit `currency_code` keep the previous RSD default; an explicit
+`null`, blank, non-string, or unsupported code is a field error.
 Expired sessions are removed opportunistically after successful registration
 or login, at most once per hour per process.
 
@@ -219,8 +221,10 @@ defaults. Entry forms and reports use the resolved effective values.
 
 Amounts are parsed from decimal strings into integer minor units using the
 currency's exponent. The original amount and currency are preserved. New forms
-preselect the effective currency, today's date, and personal attribution;
-only the amount normally needs input. The entry list offers both recording
+preselect the effective currency, today's date, and personal attribution. The
+currency list shows that default first, then currencies the member recorded
+recently in this household, then the rest of the catalog; only the amount
+normally needs input. The entry list offers both recording
 actions and compact rows on phones. Entry type, date filters, scope, and
 pagination stay in the URL, including when applying filters with HTMX. The
 forms, top navigation, and picker also work without JavaScript.
@@ -237,8 +241,9 @@ success notice.
 Households maintain exact-date and monthly exchange rates. Exact-date rates
 apply only on their date; monthly rates apply across their calendar month.
 Direct rates take precedence over inferred inverses, and conversion never
-chains currencies. All members can manage rates. Exchange-rate IDs use the
-same positive integer route and decimal-string JSON representation as entries.
+chains currencies. All members can manage rates, and the new-rate form starts
+with both currencies unselected. Exchange-rate IDs use the same positive
+integer route and decimal-string JSON representation as entries.
 
 The report page and `GET /api/v1/reports/summary` convert entries into a chosen
 display currency. Each summary is one database snapshot: display options,
