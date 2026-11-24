@@ -10,6 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// recentCurrencyWindow is how many recorded entries the recents query inspects
+// per entry kind before deduplicating.
+const recentCurrencyWindow = 20
+
 // Currency is an ISO 4217 currency and its minor-unit exponent.
 type Currency struct {
 	Code        string
@@ -65,6 +69,91 @@ func (s *Service) currencyByCodeTx(ctx context.Context, db Querier, code string)
 		return Currency{}, err
 	}
 	return currency, nil
+}
+
+// RecentCurrencies returns the currency codes the actor used most recently for
+// their own entries in one household, most recently recorded first, with each
+// code appearing once. Other members' entries and household-wide entries never
+// contribute, even for admins. Entries count by recording time, not entry date.
+func (s *Service) RecentCurrencies(ctx context.Context, householdID, actorID uuid.UUID) ([]string, error) {
+	if _, err := s.membership(ctx, householdID, actorID); err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT currency_code
+		FROM (
+			(SELECT currency_code, created_at, id, 0 AS kind_rank
+			 FROM incomes
+			 WHERE household_id = $1 AND user_id = $2
+			 ORDER BY created_at DESC, id DESC
+			 LIMIT $3)
+			UNION ALL
+			(SELECT currency_code, created_at, id, 1 AS kind_rank
+			 FROM spendings
+			 WHERE household_id = $1 AND user_id = $2
+			 ORDER BY created_at DESC, id DESC
+			 LIMIT $3)
+		) recent
+		ORDER BY created_at DESC, kind_rank, id DESC
+		LIMIT $3`,
+		householdID, actorID, recentCurrencyWindow,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("recent currencies: %w", err)
+	}
+	defer rows.Close()
+
+	codes := make([]string, 0, recentCurrencyWindow)
+	seen := make(map[string]bool, recentCurrencyWindow)
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, fmt.Errorf("scan recent currency: %w", err)
+		}
+		if seen[code] {
+			continue
+		}
+		seen[code] = true
+		codes = append(codes, code)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent currencies: %w", err)
+	}
+	return codes, nil
+}
+
+// OrderCurrencies orders entry-form currency choices for relevance: the
+// selected code first when the catalog contains it, then the recently used
+// codes in the order given, then the remaining catalog in catalog order. Codes
+// outside the catalog are ignored, so every supported currency stays available.
+func OrderCurrencies(catalog []Currency, selected string, recent []string) []Currency {
+	byCode := make(map[string]Currency, len(catalog))
+	for _, currency := range catalog {
+		byCode[currency.Code] = currency
+	}
+
+	ordered := make([]Currency, 0, len(catalog))
+	seen := make(map[string]bool, len(catalog))
+	appendCode := func(code string) {
+		if code == "" || seen[code] {
+			return
+		}
+		currency, ok := byCode[code]
+		if !ok {
+			return
+		}
+		seen[code] = true
+		ordered = append(ordered, currency)
+	}
+
+	appendCode(selected)
+	for _, code := range recent {
+		appendCode(code)
+	}
+	for _, currency := range catalog {
+		appendCode(currency.Code)
+	}
+	return ordered
 }
 
 func (s *Service) defaultCurrencyCode(ctx context.Context, householdID, userID uuid.UUID, kind Kind) (string, error) {

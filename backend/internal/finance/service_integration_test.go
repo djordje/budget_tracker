@@ -108,6 +108,96 @@ func vanishUpdatedRow(t *testing.T, pool *pgxpool.Pool, table string) {
 	}
 }
 
+func TestRecentCurrenciesScopesAndOrders(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+
+	// Recording times decide the order; entry dates deliberately contradict it.
+	insertAt(t, fixture, KindIncome, &fixture.admin.User.ID, "EUR", "2026-12-31", "2026-10-01 08:00+00")
+	insertAt(t, fixture, KindSpending, &fixture.admin.User.ID, "USD", "2026-01-01", "2026-10-01 09:01+00")
+	insertAt(t, fixture, KindIncome, &fixture.member.User.ID, "GBP", "2026-10-01", "2026-10-01 09:02+00")
+	insertAt(t, fixture, KindSpending, nil, "JPY", "2026-10-01", "2026-10-01 09:03+00")
+	insertAt(t, fixture, KindSpending, &fixture.admin.User.ID, "EUR", "2026-10-01", "2026-10-01 09:04+00")
+	insertAt(t, fixture, KindIncome, &fixture.admin.User.ID, "CAD", "2026-10-01", "2026-10-01 09:05+00")
+
+	got, err := fixture.service.RecentCurrencies(ctx, fixture.householdID, fixture.admin.User.ID)
+	require.NoError(t, err, "RecentCurrencies() error")
+	assert.Equal(t, []string{"CAD", "EUR", "USD"}, got, "recents include others' entries, household-wide entries, or dedupe wrongly")
+
+	got, err = fixture.service.RecentCurrencies(ctx, fixture.householdID, fixture.member.User.ID)
+	require.NoError(t, err, "member RecentCurrencies() error")
+	assert.Equal(t, []string{"GBP"}, got, "each member sees their own recents")
+
+	_, err = fixture.service.RecentCurrencies(ctx, fixture.householdID, fixture.outsider.User.ID)
+	assert.ErrorIs(t, err, ErrNotFound, "non-member RecentCurrencies()")
+}
+
+func TestRecentCurrenciesPerHouseholdAndWindow(t *testing.T) {
+	fixture := newFinanceFixture(t)
+	ctx := context.Background()
+
+	householdService := households.NewService(fixture.pool)
+	second, err := householdService.CreateAndActivate(ctx, households.CreateParams{
+		UserID:           fixture.admin.User.ID,
+		SessionTokenHash: fixture.admin.TokenHash,
+		Name:             "Second home",
+		CurrencyCode:     "RSD",
+	})
+	require.NoError(t, err, "create second household")
+
+	insertAt(t, fixture, KindSpending, &fixture.admin.User.ID, "CHF", "2026-10-01", "2026-10-01 08:00+00")
+	insertAtIn(t, fixture, second.ID, KindSpending, &fixture.admin.User.ID, "CHF", "2026-10-01",
+		time.Date(2026, time.October, 1, 8, 0, 0, 0, time.UTC))
+	for minute := 1; minute <= recentCurrencyWindow; minute++ {
+		insertAtIn(t, fixture, second.ID, KindSpending, &fixture.admin.User.ID, "JPY", "2026-10-01",
+			time.Date(2026, time.October, 1, 9, minute, 0, 0, time.UTC))
+	}
+	insertAtIn(t, fixture, second.ID, KindIncome, &fixture.admin.User.ID, "USD", "2026-10-01",
+		time.Date(2026, time.October, 1, 10, 0, 0, 0, time.UTC))
+
+	got, err := fixture.service.RecentCurrencies(ctx, second.ID, fixture.admin.User.ID)
+	require.NoError(t, err, "RecentCurrencies() error")
+	assert.Equal(t, []string{"USD", "JPY"}, got, "window keeps only the latest recorded entries")
+
+	got, err = fixture.service.RecentCurrencies(ctx, fixture.householdID, fixture.admin.User.ID)
+	require.NoError(t, err, "first household RecentCurrencies() error")
+	assert.Equal(t, []string{"CHF"}, got, "recents leaked across households")
+}
+
+// insertAt records an entry in the fixture household with an explicit recording
+// time so tests can control recency without sleeping.
+func insertAt(t *testing.T, fixture *financeFixture, kind Kind, userID *uuid.UUID, code, entryDate, createdAt string) {
+	t.Helper()
+	insertAtIn(t, fixture, fixture.householdID, kind, userID, code, entryDate, createdAtTime(t, createdAt))
+}
+
+func insertAtIn(
+	t *testing.T,
+	fixture *financeFixture,
+	householdID uuid.UUID,
+	kind Kind,
+	userID *uuid.UUID,
+	code, entryDate string,
+	createdAt time.Time,
+) {
+	t.Helper()
+	table := pgx.Identifier{kind.table()}.Sanitize()
+	if _, err := fixture.pool.Exec(context.Background(), `
+		INSERT INTO `+table+` (household_id, user_id, amount_minor, currency_code, entry_date, created_at)
+		VALUES ($1, $2, 100, $3, $4::date, $5)`,
+		householdID, userID, code, entryDate, createdAt,
+	); err != nil {
+		require.NoError(t, err, "insert %s entry", kind)
+	}
+}
+
+func createdAtTime(t *testing.T, raw string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse("2006-01-02 15:04-07", raw)
+	require.NoError(t, err, "parse recording time %q", raw)
+	return parsed.UTC()
+}
+
 func TestCurrencies(t *testing.T) {
 	fixture := newFinanceFixture(t)
 	currencies, err := fixture.service.Currencies(context.Background())
