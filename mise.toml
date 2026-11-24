@@ -2,6 +2,7 @@
 go = "1.27.3"
 golangci-lint = "2.15.0"
 node = "24.14.0"
+watchexec = "2.8.0"
 "go:github.com/gohugoio/gotmplfmt" = "0.5.0"
 
 [env]
@@ -91,9 +92,25 @@ description = "Run unit tests"
 run = "cd backend && go test ./..."
 
 [tasks.dev]
-description = "Run the development HTTP server with disk assets"
+description = "Run the development HTTP server and watch Go, templates, and CSS"
 depends = ["assets:build"]
-run = "cd backend && WEB_STATIC_DIR=\"$(pwd)/web/static\" go run ./cmd/server"
+run = [{ tasks = ["dev:server", "css:watch"] }]
+
+[tasks."dev:server"]
+description = "Rebuild and restart the development server on source changes"
+hide = true
+dir = "backend"
+run = '''
+mkdir -p bin
+export WEB_STATIC_DIR="$PWD/web/static"
+# Watch only the inputs that need a restart: Go source (including the embed
+# files), templates, module files, and migrations. Generated assets and
+# node_modules are excluded so Tailwind output does not churn the watcher.
+watchexec --restart --no-meta \
+  -w cmd -w internal -w web -w db -w go.mod -w go.sum \
+  --exts go,html,mod,sum,sql -- \
+  'go build -o bin/dev-server ./cmd/server && exec ./bin/dev-server'
+'''
 
 [tasks.build]
 description = "Build the server executable"

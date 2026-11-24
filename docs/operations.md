@@ -32,7 +32,7 @@ mise run db:migrate
 mise run db:status
 mise run db:reset       # destroys local data
 mise run assets:build
-mise run css:watch      # serve CSS updates from disk during development
+mise run css:watch      # watch CSS and templates without running the server
 ```
 
 Migrations are numbered SQL files in `backend/db/migrations`. Applied versions
@@ -154,7 +154,13 @@ smoke checks. Automated coverage includes:
   `docker compose logs postgres`.
 - If CSS or HTMX is stale, run `mise run assets:build`; generated assets are
   intentionally not committed.
-- `mise run dev` serves assets from disk using an absolute `WEB_STATIC_DIR`.
+- `mise run dev` watches Go source, templates, module files, and migrations,
+  and restarts the dev server after edits. If the watcher is missing, run
+  `mise install`. If a build fails, check the task output, fix the error, and
+  save again.
+- `mise run dev` also runs the Tailwind watcher, so CSS changes reach the
+  browser on refresh without restarting the server.
+- Development runs serve assets from disk using an absolute `WEB_STATIC_DIR`.
   The built `./bin/budget-tracker` uses embedded assets; do not set a relative
   `WEB_STATIC_DIR` unless running from the directory it is relative to. If a
   configured development directory is missing, the server logs a warning and

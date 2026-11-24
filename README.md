@@ -31,6 +31,11 @@ compiles the browser assets, starts PostgreSQL, and applies migrations. The
 application is available at <http://localhost:8080/app>. Health checks are
 served at `/healthz` (liveness) and `/readyz` (database readiness).
 
+`mise run dev` uses the pinned `watchexec` tool to rebuild and restart the Go
+server when Go source, HTML templates, module files, or migrations change. Wait
+for the server to start again, then refresh your browser. If a build fails, fix
+the error and save again; the watcher keeps running.
+
 Other development tasks:
 
 ```sh
@@ -40,10 +45,10 @@ mise run format:html:check # check template formatting without writing
 mise run lint              # run static analysis
 mise run test              # run unit tests
 mise run build             # build bin/budget-tracker
-mise run dev               # run the development server
+mise run dev               # run the server and watch Go, templates, and CSS
 mise run css:build         # compile Tailwind CSS
 mise run assets:build      # compile CSS and copy HTMX
-mise run css:watch         # rebuild CSS while editing templates
+mise run css:watch         # watch CSS and templates without running the server
 mise run db:status         # show applied and pending migrations
 mise run db:down           # stop local PostgreSQL
 ```
@@ -229,9 +234,10 @@ Tailwind CSS is compiled at build time from
 HTMX is copied from `node_modules` into `backend/web/static/js/htmx.min.js`;
 the small hand-written confirmation script lives in `backend/web/static/js/app.js`.
 Generated assets are ignored by git and embedded in the Go executable.
-`mise run dev` and `mise run build` rebuild them automatically. In development,
-`mise run dev` serves assets from disk, so `mise run css:watch` updates styling
-without restarting the server. Production builds use the embedded copies.
+`mise run dev` and `mise run build` build these assets first. `mise run dev`
+also runs the Tailwind watcher alongside the server, so CSS changes are served
+from disk on refresh without a server restart or a second terminal. Production
+builds use the embedded copies.
 
 ## Database migrations
 
