@@ -4,8 +4,11 @@ package store_test
 
 import (
 	"context"
+	"io/fs"
+	"path"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,14 +25,11 @@ import (
 
 // entrySchemaConstraints are the constraints added by
 // 0009_entry_membership_and_name_limits.sql.
-var entrySchemaConstraints = []struct {
-	name  string
-	table string
-}{
-	{name: "incomes_membership_fk", table: "incomes"},
-	{name: "spendings_membership_fk", table: "spendings"},
-	{name: "users_first_name_length", table: "users"},
-	{name: "users_last_name_length", table: "users"},
+var entrySchemaConstraints = []string{
+	"incomes_membership_fk",
+	"spendings_membership_fk",
+	"users_first_name_length",
+	"users_last_name_length",
 }
 
 func TestEntryMembershipConstraint(t *testing.T) {
@@ -92,10 +92,10 @@ func TestUserNameLengthConstraints(t *testing.T) {
 }
 
 // TestMigration0009RollsBackInvalidLegacyRows replays the delivered migration
-// against a schema that has the constraints removed and legacy rows that
-// violate them. The migration adds each constraint NOT VALID and then validates
-// it, so the failure happens during validation and the runner's implicit
-// transaction must roll back the constraints it already added.
+// against a schema migrated only through 0008 and seeded with legacy rows that
+// violate the new constraints. The migration adds each constraint NOT VALID and
+// then validates it, so the failure happens during validation and the runner's
+// implicit transaction must roll back the constraints it already added.
 func TestMigration0009RollsBackInvalidLegacyRows(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -125,18 +125,16 @@ func TestMigration0009RollsBackInvalidLegacyRows(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			pool := testdb.New(t)
+			// Start from a schema migrated through 0008, so the later constraints
+			// do not exist and the seeded rows are accepted. Migrating then runs
+			// 0009 from the same bytes as production, letting the runner verify
+			// the recorded checksums.
+			pool := testdb.NewWithMigrations(t, migrationsThrough(t, 8))
 			ctx := context.Background()
 
-			dropEntrySchemaConstraints(t, pool)
-			// Forget 0009 and every later migration so the runner replays 0009
-			// instead of rejecting it as older than an applied migration.
-			if _, err := pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version >= 9"); err != nil {
-				require.NoError(t, err, "forget migration 0009 and later")
-			}
 			tc.seed(t, pool)
 
-			applied, err := store.Migrate(ctx, pool, dbmigrations.Migrations, "migrations")
+			applied, err := store.Migrate(ctx, pool, migrationsThrough(t, 9), "migrations")
 			require.Error(t, err, "Migrate() with legacy rows that violate 0009")
 			assert.Empty(t, applied, "migrations applied before the failure")
 			assert.ErrorContains(t, err, "apply migration 0009_entry_membership_and_name_limits")
@@ -147,7 +145,7 @@ func TestMigration0009RollsBackInvalidLegacyRows(t *testing.T) {
 			assert.Equal(t, tc.wantConstraint, pgErr.ConstraintName, "constraint that failed validation")
 
 			for _, constraint := range entrySchemaConstraints {
-				assert.False(t, constraintExists(t, pool, constraint.name), "constraint %s survived the rollback", constraint.name)
+				assert.False(t, constraintExists(t, pool, constraint), "constraint %s survived the rollback", constraint)
 			}
 
 			var rows int
@@ -182,15 +180,27 @@ func seedOverlongFirstName(t *testing.T, pool *pgxpool.Pool) {
 	}
 }
 
-func dropEntrySchemaConstraints(t *testing.T, pool *pgxpool.Pool) {
+// migrationsThrough returns a view of the embedded migrations up to and
+// including version. It keeps each migration's embedded SQL under its
+// canonical filename, so the runner records the same checksums as a real
+// deployment and a replay still fails if the SQL changes.
+func migrationsThrough(t *testing.T, version int64) fs.FS {
 	t.Helper()
 
-	for _, constraint := range entrySchemaConstraints {
-		_, err := pool.Exec(context.Background(),
-			"ALTER TABLE "+pgx.Identifier{constraint.table}.Sanitize()+
-				" DROP CONSTRAINT "+pgx.Identifier{constraint.name}.Sanitize())
-		require.NoError(t, err, "drop constraint %s", constraint.name)
+	migrations, err := store.LoadMigrations(dbmigrations.Migrations, "migrations")
+	require.NoError(t, err, "load embedded migrations")
+
+	bounded := make(fstest.MapFS, len(migrations))
+	for _, migration := range migrations {
+		if migration.Version > version {
+			continue
+		}
+		bounded[path.Join("migrations", migration.Label()+".sql")] = &fstest.MapFile{
+			Data: []byte(migration.SQL),
+		}
 	}
+
+	return bounded
 }
 
 func constraintExists(t *testing.T, pool *pgxpool.Pool, name string) bool {

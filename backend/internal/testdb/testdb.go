@@ -4,6 +4,7 @@ package testdb
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 	"testing"
@@ -16,9 +17,20 @@ import (
 	"budgettracker/internal/store"
 )
 
-// New returns a pool whose search_path points at a freshly migrated schema.
-// It skips the test when TEST_DATABASE_URL is not set.
+// New returns a pool whose search_path points at a freshly migrated schema
+// built from the embedded migrations. It skips the test when
+// TEST_DATABASE_URL is not set.
 func New(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	return NewWithMigrations(t, dbmigrations.Migrations)
+}
+
+// NewWithMigrations returns a pool whose search_path points at a fresh schema
+// migrated from the supplied filesystem. It lets a test control which
+// migrations the schema starts from. It skips the test when
+// TEST_DATABASE_URL is not set.
+func NewWithMigrations(t *testing.T, migrations fs.FS) *pgxpool.Pool {
 	t.Helper()
 
 	dsn := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
@@ -65,7 +77,7 @@ func New(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 
-	if _, err := store.Migrate(ctx, pool, dbmigrations.Migrations, "migrations"); err != nil {
+	if _, err := store.Migrate(ctx, pool, migrations, "migrations"); err != nil {
 		t.Fatalf("apply test migrations: %v", err)
 	}
 
