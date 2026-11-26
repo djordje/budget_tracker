@@ -112,6 +112,27 @@ mise run test:integration
 `mise run check:all` adds the PostgreSQL integration tests. CI runs the same
 migration and check tasks on every push and pull request.
 
+### Editor support
+
+Open the repository root in your editor. `go.work` points Go tooling at the
+module in `backend/`. Zed's project settings tell `gopls` to include
+integration tests for features like go-to-definition.
+
+If you work on integration tests in Neovim 0.11+, you can opt in by adding
+this to your existing `gopls` configuration:
+
+```lua
+vim.lsp.config("gopls", {
+  settings = {
+    gopls = {
+      buildFlags = { "-tags=integration" },
+    },
+  },
+})
+```
+
+This is optional and does not change which tests the mise tasks run.
+
 ## Accounts and households
 
 A user can belong to multiple households. On HTML pages, the URL identifies
