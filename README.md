@@ -45,6 +45,7 @@ mise run format:html:check # check template formatting without writing
 mise run lint              # run static analysis
 mise run test              # run unit tests
 mise run build             # build bin/budget-tracker
+mise run hooks:install     # enable the tracked pre-commit hook in this clone
 mise run dev               # run the server and watch Go, templates, and CSS
 mise run css:build         # compile Tailwind CSS
 mise run assets:build      # compile CSS and copy HTMX
@@ -132,6 +133,47 @@ vim.lsp.config("gopls", {
 ```
 
 This is optional and does not change which tests the mise tasks run.
+
+## Commit checks
+
+The repository tracks a pre-commit hook that runs the fast checks against the
+tree Git will record: `format:check`, `format:html:check`, `lint` (both build
+tag modes), and `test`. It exports the effective index to a private temporary
+directory with `git checkout-index` and runs the mise tasks there, so the
+checks use staged content rather than working-tree edits. This is a Git
+checkout, not a raw copy of staged blobs: checkout attributes (including an
+unstaged `.gitattributes`) and configured filters can affect the exported
+bytes. The export is removed on success, failure, or interruption.
+
+Enable the hook once per clone:
+
+```sh
+mise run hooks:install
+```
+
+The task sets `core.hooksPath` to the tracked `.githooks` directory for this
+clone only; it does not copy files or change global configuration. It refuses
+to overwrite a different hooks path, whether configured locally or inherited
+from global configuration. While enabled, Git stops running hooks from its
+default hooks directory (`.git/hooks` in a standard clone). The task does not
+inspect, move, or delete those hooks.
+Installation is not part of `mise run setup`, and `check`, `check:all`, and CI
+are unchanged. The hook needs `mise` and the tools from `mise install`.
+
+It deliberately skips the PostgreSQL integration tests, the asset build, and
+the release build, which need Docker, `node_modules`, or much more time. Run
+`mise run test:integration` and `mise run build` before committing changes that
+depend on them. Documentation-only commits are checked too.
+
+A failed commit prints the failing task and its output, for example the Go
+files that need formatting or the failing test. Fix the problem, `git add` the
+fix, and commit again. `git commit --no-verify` skips the hook; it proves
+nothing about the staged tree, and CI still runs `check:all`. To stop using the
+hook, restore Git's default hooks directory:
+
+```sh
+git config --local --unset core.hooksPath
+```
 
 ## Accounts and households
 
@@ -281,6 +323,7 @@ mise run db:reset    # destroy and recreate the local database
 ## Project structure
 
 ```text
+.githooks/             tracked pre-commit hook (opt-in)
 backend/
   cmd/server/          HTTP server entrypoint
   cmd/migrate/         migration command

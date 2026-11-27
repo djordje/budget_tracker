@@ -149,6 +149,26 @@ run = [
 description = "Run tests against PostgreSQL"
 run = "cd backend && TEST_DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://budget@localhost:5433/budget_tracker?sslmode=disable}\" go test -tags=integration ./..."
 
+[tasks."hooks:install"]
+description = "Enable the tracked pre-commit hook in this clone"
+run = '''
+if configured=$(git config --get core.hooksPath); then
+  if [ "$configured" = ".githooks" ]; then
+    echo "hooks:install: already enabled; nothing to do."
+    exit 0
+  fi
+  echo "hooks:install: core.hooksPath is already set to '$configured'; leaving it unchanged." >&2
+  echo "hooks:install: see: git config --show-origin core.hooksPath" >&2
+  exit 1
+elif [ "$?" -ne 1 ]; then
+  exit 1
+fi
+
+git config --local core.hooksPath .githooks
+echo "hooks:install: enabled .githooks/pre-commit for this clone."
+echo "hooks:install: undo with: git config --local --unset core.hooksPath"
+'''
+
 [tasks.check]
 description = "Run formatting, linting, tests, and a build"
 run = [

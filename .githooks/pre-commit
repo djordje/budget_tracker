@@ -1,0 +1,51 @@
+#!/bin/sh
+# Run the fast checks against the tree Git is about to commit.
+#
+# The checks run in a private checkout of the effective index, not in the
+# working tree, so partially staged files and unrelated local edits cannot
+# make a commit pass checks it would fail on its own. This is a Git checkout:
+# checkout attributes and filters may transform the exported bytes, exactly as
+# they would for a checkout of the commit.
+set -eu
+
+if ! command -v mise >/dev/null 2>&1; then
+  echo "pre-commit: mise is required for the commit checks; see README.md" >&2
+  exit 1
+fi
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/budget-tracker-pre-commit.XXXXXX")
+tmp=$(cd "$tmp" && pwd)
+
+cleanup() {
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Export the effective index. GIT_INDEX_FILE is left untouched so hooks run for
+# commits built from an alternate index (for example `git commit --only`) see
+# the tree that commit will contain.
+git checkout-index -f --all --prefix="$tmp/"
+
+run_check() {
+  task=$1
+  printf 'pre-commit: mise run %s (staged tree)\n' "$task"
+  if ! MISE_TRUSTED_CONFIG_PATHS="$tmp" mise run "$task"; then
+    printf '\npre-commit: %s failed for the staged tree.\n' "$task" >&2
+    printf 'pre-commit: fix it, then stage the fix and commit again.\n' >&2
+    printf 'pre-commit: the working tree is unchanged; only the index is checked.\n' >&2
+    return 1
+  fi
+}
+
+(
+  cd "$tmp"
+  run_check format:check
+  run_check format:html:check
+  run_check lint
+  run_check test
+)

@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Complete
 
 # Fast checks on the commit Git will record
 
@@ -36,4 +36,19 @@ Deliver the hook, installation docs, and validation together. Exercise actual `g
 - Verify installation in a fresh clone, repeat installation as a no-op, and removal without changing global config. Verify that a conflicting inherited or local hooks path causes the installer to refuse without changing config or hook files. Confirm that installation leaves any default hook files untouched but Git stops running them while `.githooks` is enabled.
 - Time the installed hook end to end through actual `git commit` invocations, using a different valid staged input each time (include Go and HTML template edits). Report a fresh-cache run separately from at least three warm runs; don't benchmark repeated checks of an unchanged index. Proposed ordinary-commit budget: median **under 5 seconds** on the measured machine (a selection criterion, not a timeout). Record actual hook timings here before marking complete. If over budget, measure which step dominates before dropping anything; don't split the lint modes or introduce path filters by default.
 
-Decision for review: is the measured ~3–4 seconds acceptable on every commit? Cold caches and slower machines may cost more. No performance claim for those environments yet.
+## Delivery and validation
+
+Delivered in `.githooks/pre-commit`, the `hooks:install` task in `mise.toml`, and the "Commit checks" section of `README.md`. `check`, `check:all`, `.github/workflows/ci.yml`, and `AGENTS.md` are unchanged.
+
+Validated in disposable clones with `core.hooksPath` set by `mise run hooks:install`, and with no `.env`, Docker, or `node_modules`:
+
+- A valid staged tree committed through the hook.
+- A staged Go formatting error and a staged unformatted HTML template each blocked the commit and named the offending file.
+- A staged Go compile error blocked the commit even after the working copy was fixed. The index and working file hashes were unchanged and no export directory remained. The reverse case — valid staged file, broken working copy — committed the staged content and left the working change unstaged.
+- With a compile error staged, `git commit --only -m docs -- README.md` succeeded, contained only the README change, and left the Go error staged for the next commit.
+- `hooks:install` enabled the hook in a fresh clone, was a no-op on repeat, and removal with `git config --local --unset core.hooksPath` restored Git's default. It refused without changing anything when a different local or inherited hooks path was already set (including an explicitly empty value).
+- Sending `TERM` to a running hook aborted the commit, removed the export, and left the staged change intact.
+
+Timing through actual `git commit`, warm compiler and linter caches, a different valid staged input each time (Go comments, an HTML template, a Go test, and a mixed change): 3.46, 3.37, 3.49, and 3.48 s, median 3.47 s. One run with fresh `GOCACHE` and `GOLANGCI_LINT_CACHE` took 10.81 s.
+
+Decision: ordinary commits stay inside the proposed 5 s budget on the measured machine. The cold-cache run is recorded for reference only; there is still no performance claim for cold caches or slower machines.

@@ -48,4 +48,4 @@ Rules:
 | 2026-11-24 | [iOS date input sizing](./20261124_220059_ios_date_input_sizing.md) | In progress |
 | 2026-11-24 | [Household currency choices](./20261124_223027_household_currency_choices.md) | Complete |
 | 2026-11-26 | [Migration 0009 rollback fixture](./20261126_214417_migration_0009_rollback_fixture.md) | Complete |
-| 2026-11-27 | [Fast staged pre-commit checks](./20261127_085811_pre_commit_checks.md) | Proposed |
+| 2026-11-27 | [Fast staged pre-commit checks](./20261127_085811_pre_commit_checks.md) | Complete |
